@@ -1,0 +1,2793 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Kafka</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The idea</div>
+          <a href="#log">It's a log, not a queue</a>
+          <a href="#partitions">Topics and partitions</a>
+          <div class="grp">Writing</div>
+          <a href="#producer">The producer</a>
+          <a href="#acks">Durability and acks</a>
+          <div class="grp">Reading</div>
+          <a href="#consumer">The consumer</a>
+          <a href="#groups">Consumer groups</a>
+          <a href="#offsets">Offsets and commits</a>
+          <a href="#rebalance">Rebalancing</a>
+          <div class="grp">Guarantees</div>
+          <a href="#semantics">Delivery semantics</a>
+          <a href="#transactions">Transactions</a>
+          <div class="grp">Around it</div>
+          <a href="#serde">Serialization</a>
+          <a href="#retention">Retention and compaction</a>
+          <a href="#frameworks">Spring and Streams</a>
+          <div class="grp">Reference</div>
+          <a href="#config">Configs that matter</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">apache kafka &middot; from the log up</p>
+          <h1>Inside Kafka</h1>
+          <p class="dek">
+            Almost every Kafka mistake comes from thinking it's a message queue.
+            It isn't. It's a <em>durable, replayable log</em> that many readers
+            walk independently — and once that clicks, the rest is detail.
+          </p>
+        </header>
+
+        <!-- ============ LOG ============ -->
+        <section id="log">
+          <h2>It's a log, not a queue</h2>
+          <p class="lede">
+            A queue hands you a message and forgets it. Kafka appends to a file
+            and remembers — every reader tracks their own position, and nothing
+            is consumed away.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="A partition as an append-only sequence of numbered offsets, with a producer appending at the end and two consumers reading at independent positions"
+              >
+                <defs>
+                  <marker
+                    id="k1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    ONE PARTITION — an append-only sequence. Nothing is ever
+                    removed by reading.
+                  </text>
+
+                  <g>
+                    <rect
+                      x="60"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="91"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      fill="var(--ink)"
+                    >
+                      0
+                    </text>
+                    <rect
+                      x="126"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="157"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      fill="var(--ink)"
+                    >
+                      1
+                    </text>
+                    <rect
+                      x="192"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="2.5"
+                    />
+                    <text
+                      x="223"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      font-weight="700"
+                      fill="var(--val)"
+                    >
+                      2
+                    </text>
+                    <rect
+                      x="258"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="289"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      fill="var(--ink)"
+                    >
+                      3
+                    </text>
+                    <rect
+                      x="324"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="355"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      fill="var(--ink)"
+                    >
+                      4
+                    </text>
+                    <rect
+                      x="390"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="2.5"
+                    />
+                    <text
+                      x="421"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      font-weight="700"
+                      fill="var(--tree)"
+                    >
+                      5
+                    </text>
+                    <rect
+                      x="456"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="487"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="12"
+                      fill="var(--ink)"
+                    >
+                      6
+                    </text>
+                    <rect
+                      x="522"
+                      y="86"
+                      width="62"
+                      height="44"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                      stroke-dasharray="5 4"
+                    />
+                    <text
+                      x="553"
+                      y="113"
+                      text-anchor="middle"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                    >
+                      next
+                    </text>
+                  </g>
+                  <text x="60" y="148" font-size="10.5" fill="var(--ink-faint)">
+                    oldest
+                  </text>
+                  <text
+                    x="524"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    newest
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="620"
+                      y1="70"
+                      x2="566"
+                      y2="100"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#k1)"
+                    />
+                  </g>
+                  <text
+                    x="688"
+                    y="58"
+                    text-anchor="end"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    producer appends
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="223"
+                      y1="176"
+                      x2="223"
+                      y2="136"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#k1)"
+                    />
+                  </g>
+                  <rect
+                    x="150"
+                    y="180"
+                    width="146"
+                    height="38"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="223"
+                    y="197"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    billing service
+                  </text>
+                  <text
+                    x="223"
+                    y="211"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    at offset 2
+                  </text>
+
+                  <g color="var(--tree)">
+                    <line
+                      x1="421"
+                      y1="176"
+                      x2="421"
+                      y2="136"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#k1)"
+                    />
+                  </g>
+                  <rect
+                    x="348"
+                    y="180"
+                    width="146"
+                    height="38"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="421"
+                    y="197"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    analytics
+                  </text>
+                  <text
+                    x="421"
+                    y="211"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--tree)"
+                  >
+                    at offset 5
+                  </text>
+
+                  <text x="12" y="242" font-size="11" fill="var(--ink-soft)">
+                    Two readers, two positions, one copy of the data. Either can
+                    rewind and read it all again.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Reading is not destructive.</b> A consumer's position is just a
+              number it remembers. Move the number backwards and you replay
+              history — which is why Kafka works for event sourcing, backfills,
+              and adding a new service that needs the last month of traffic.
+            </figcaption>
+          </figure>
+
+          <p>
+            Three consequences follow immediately, and they explain most of
+            Kafka's design:
+          </p>
+          <ul>
+            <li>
+              <strong>Many independent consumers, no fan-out cost.</strong> Ten
+              services reading the same topic don't make ten copies. They make
+              ten offsets.
+            </li>
+            <li>
+              <strong>Data lives on a clock, not on consumption.</strong>
+              Messages are deleted when they age out (or get compacted), never
+              because someone read them.
+            </li>
+            <li>
+              <strong>Order is a property of the log, not the topic.</strong>
+              Which brings us to partitions.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ PARTITIONS ============ -->
+        <section id="partitions">
+          <h2>Topics and partitions</h2>
+          <p class="lede">
+            A topic is a name. A <strong>partition</strong> is the actual log.
+            Splitting a topic into partitions is what buys parallelism — and
+            what costs you global ordering.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 260"
+                role="img"
+                aria-label="A record key hashed to choose one of three partitions, with all records sharing a key landing in the same partition"
+              >
+                <defs>
+                  <marker
+                    id="k2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <rect
+                    x="12"
+                    y="60"
+                    width="130"
+                    height="52"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="77"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    key = "user-42"
+                  </text>
+                  <text
+                    x="77"
+                    y="100"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--key)"
+                  >
+                    the record key
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="146"
+                      y1="86"
+                      x2="186"
+                      y2="86"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#k2)"
+                    />
+                  </g>
+
+                  <rect
+                    x="192"
+                    y="60"
+                    width="164"
+                    height="52"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="274"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    hash(key) % 3
+                  </text>
+                  <text
+                    x="274"
+                    y="100"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    the default partitioner
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="360"
+                      y1="86"
+                      x2="400"
+                      y2="86"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#k2)"
+                    />
+                  </g>
+
+                  <text x="410" y="20" font-size="11" fill="var(--ink-faint)">
+                    TOPIC "orders" — 3 independent logs
+                  </text>
+
+                  <rect
+                    x="406"
+                    y="34"
+                    width="280"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text x="424" y="59" font-size="11.5" fill="var(--ink-faint)">
+                    P0
+                  </text>
+                  <text x="470" y="59" font-size="11" fill="var(--ink-soft)">
+                    · · · · ·
+                  </text>
+
+                  <rect
+                    x="406"
+                    y="80"
+                    width="280"
+                    height="40"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="424"
+                    y="105"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    P1
+                  </text>
+                  <text
+                    x="470"
+                    y="105"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    user-42 · user-42 · user-42
+                  </text>
+
+                  <rect
+                    x="406"
+                    y="126"
+                    width="280"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="424"
+                    y="151"
+                    font-size="11.5"
+                    fill="var(--ink-faint)"
+                  >
+                    P2
+                  </text>
+                  <text x="470" y="151" font-size="11" fill="var(--ink-soft)">
+                    · · · · ·
+                  </text>
+
+                  <text
+                    x="406"
+                    y="192"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Same key → same partition → ordered
+                  </text>
+                  <text x="406" y="210" font-size="11" fill="var(--hot)">
+                    Across P0/P1/P2 there is no order at all.
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="180"
+                    width="360"
+                    height="62"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="192"
+                    y="203"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    key = null → no ordering guarantee
+                  </text>
+                  <text
+                    x="192"
+                    y="222"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    records are spread across partitions for throughput
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The ordering rule, in full:</b> Kafka guarantees order
+              <em>within a partition</em> and nowhere else. If you need events
+              for one entity processed in sequence, give them all the same key.
+            </figcaption>
+          </figure>
+
+          <div class="note danger">
+            <span class="tag">Partition count is close to permanent</span>
+            <p>
+              You can add partitions to a topic, but you cannot remove them —
+              and adding them <strong>changes the hash mapping</strong>, so
+              <code>user-42</code> may move from P1 to P4. Records already
+              written stay where they are, and per-key ordering breaks across
+              the boundary. Size partitions for the parallelism you'll need
+              later, not the load you have today.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ PRODUCER ============ -->
+        <section id="producer">
+          <h2>The producer</h2>
+          <p class="lede">
+            Thread-safe, asynchronous, and batching by default. One instance per
+            application is the normal shape — sharing it across threads is not
+            just allowed, it's the point.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="yes">Yes — share it</dd>
+            </div>
+            <div>
+              <dt>send() returns</dt>
+              <dd>Future, immediately</dd>
+            </div>
+            <div>
+              <dt>Batching</dt>
+              <dd>batch.size / linger.ms</dd>
+            </div>
+            <div>
+              <dt>Idempotence</dt>
+              <dd class="yes">On by default (3.0+)</dd>
+            </div>
+            <div>
+              <dt>Must call</dt>
+              <dd>close() or flush()</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="t">Properties</span> props = <span class="k">new</span> <span class="t">Properties</span>();
+props.put(<span class="s">"bootstrap.servers"</span>, <span class="s">"localhost:9092"</span>);
+props.put(<span class="s">"key.serializer"</span>,   <span class="t">StringSerializer</span>.<span class="k">class</span>.getName());
+props.put(<span class="s">"value.serializer"</span>, <span class="t">StringSerializer</span>.<span class="k">class</span>.getName());
+
+<span class="c">// try-with-resources — close() flushes pending batches. Skip it and</span>
+<span class="c">// in-flight records are silently lost.</span>
+<span class="k">try</span> (<span class="t">Producer</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; producer = <span class="k">new</span> <span class="t">KafkaProducer</span>&lt;&gt;(props)) {
+
+    <span class="t">ProducerRecord</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; record =
+        <span class="k">new</span> <span class="t">ProducerRecord</span>&lt;&gt;(<span class="s">"orders"</span>, <span class="s">"user-42"</span>, <span class="s">"{\"total\":19.99}"</span>);
+
+    <span class="c">// Asynchronous — returns before the broker has seen anything.</span>
+    producer.send(record, (meta, ex) -&gt; {
+        <span class="k">if</span> (ex != <span class="k">null</span>) log.error(<span class="s">"send failed"</span>, ex);
+        <span class="k">else</span> log.info(<span class="s">"p{} offset {}"</span>, meta.partition(), meta.offset());
+    });
+
+    <span class="c">// Synchronous — correct, and roughly 100x slower. Kills batching.</span>
+    <span class="t">RecordMetadata</span> m = producer.send(record).get();
+}</pre>
+          </div>
+
+          <h3>Batching is where the throughput comes from</h3>
+          <p>
+            The producer does not send one record per call. It accumulates
+            records per partition and ships them as a batch, which is why Kafka
+            can move millions of small messages a second.
+          </p>
+
+          <div class="code">
+            <pre>props.put(<span class="s">"batch.size"</span>,  <span class="n">16384</span>);   <span class="c">// bytes per batch — 16KB default</span>
+props.put(<span class="s">"linger.ms"</span>,   <span class="n">10</span>);      <span class="c">// wait this long to fill a batch (0 default)</span>
+props.put(<span class="s">"compression.type"</span>, <span class="s">"lz4"</span>);   <span class="c">// compresses the whole batch</span>
+props.put(<span class="s">"buffer.memory"</span>, <span class="n">33554432</span>);      <span class="c">// 32MB of unsent records</span></pre>
+          </div>
+
+          <p>
+            <code>linger.ms=0</code> means "send as soon as a thread is free" —
+            which under load still batches, because batches form while the
+            previous send is in flight. Raising it to 5–20ms trades a little
+            latency for a large throughput gain. If
+            <code>buffer.memory</code> fills, <code>send()</code> blocks, then
+            throws <code>TimeoutException</code>.
+          </p>
+        </section>
+
+        <!-- ============ ACKS ============ -->
+        <section id="acks">
+          <h2>Durability and acks</h2>
+          <p class="lede">
+            Each partition has one leader and some followers.
+            <code>acks</code> decides how many of them must have the record
+            before the producer calls it done — and it is the single most
+            consequential producer setting.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="The three acks settings compared against a leader and two follower replicas, showing what each one risks"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    one partition, replication factor 3
+                  </text>
+
+                  <rect
+                    x="250"
+                    y="30"
+                    width="200"
+                    height="40"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="55"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    LEADER
+                  </text>
+                  <rect
+                    x="250"
+                    y="78"
+                    width="200"
+                    height="34"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="350"
+                    y="100"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    follower 1 (in ISR)
+                  </text>
+                  <rect
+                    x="250"
+                    y="118"
+                    width="200"
+                    height="34"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="350"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    follower 2 (in ISR)
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="176"
+                    width="216"
+                    height="62"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="120"
+                    y="197"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    acks = 0
+                  </text>
+                  <text
+                    x="120"
+                    y="214"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    never waits, never knows
+                  </text>
+                  <text
+                    x="120"
+                    y="229"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    loses data freely
+                  </text>
+
+                  <rect
+                    x="242"
+                    y="176"
+                    width="216"
+                    height="62"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="197"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    acks = 1
+                  </text>
+                  <text
+                    x="350"
+                    y="214"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--key)"
+                  >
+                    leader only
+                  </text>
+                  <text
+                    x="350"
+                    y="229"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--key)"
+                  >
+                    leader dies → record gone
+                  </text>
+
+                  <rect
+                    x="472"
+                    y="176"
+                    width="216"
+                    height="62"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="580"
+                    y="197"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    acks = all
+                  </text>
+                  <text
+                    x="580"
+                    y="214"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    every in-sync replica
+                  </text>
+                  <text
+                    x="580"
+                    y="229"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    survives a leader failure
+                  </text>
+
+                  <text x="480" y="52" font-size="10.5" fill="var(--ink-faint)">
+                    ISR = replicas caught
+                  </text>
+                  <text x="480" y="68" font-size="10.5" fill="var(--ink-faint)">
+                    up with the leader
+                  </text>
+                  <text
+                    x="480"
+                    y="96"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    acks=all alone is
+                  </text>
+                  <text
+                    x="480"
+                    y="112"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    not enough →
+                  </text>
+                  <text x="480" y="134" font-size="10.5" fill="var(--ink-soft)">
+                    pair it with
+                  </text>
+                  <text x="480" y="150" font-size="10.5" fill="var(--ink-soft)">
+                    min.insync.replicas=2
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The trap in <code>acks=all</code>:</b> "all in-sync replicas"
+              can mean <em>one</em>, if the followers have fallen behind and
+              dropped out of the ISR. Without <code>min.insync.replicas</code>,
+              acks=all degrades silently into acks=1.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// The durable combination. Both halves are required.</span>
+props.put(<span class="s">"acks"</span>, <span class="s">"all"</span>);              <span class="c">// producer side</span>
+<span class="c">// min.insync.replicas=2        broker/topic side</span>
+
+<span class="c">// With replication.factor=3 and min.insync.replicas=2 you can lose</span>
+<span class="c">// one broker and keep writing. Lose two, and the producer gets</span>
+<span class="c">// NotEnoughReplicasException — which is correct: it refuses to</span>
+<span class="c">// accept a write it cannot make durable.</span></pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Idempotence is on by default now</span>
+            <p>
+              Since Kafka 3.0, <code>enable.idempotence=true</code> is the
+              default. It stamps each record with a producer id and sequence
+              number so a retried send cannot create a duplicate, and it implies
+              <code>acks=all</code>, <code>retries&gt;0</code>, and
+              <code>max.in.flight.requests.per.connection&lt;=5</code>. If you
+              explicitly set <code>acks=1</code>, you are silently turning
+              idempotence off.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ CONSUMER ============ -->
+        <section id="consumer">
+          <h2>The consumer</h2>
+          <p class="lede">
+            A single-threaded poll loop. Unlike the producer,
+            <code>KafkaConsumer</code> is <strong>not thread-safe</strong> — one
+            consumer per thread, always.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>Model</dt>
+              <dd>Pull, not push</dd>
+            </div>
+            <div>
+              <dt>poll() returns</dt>
+              <dd>A batch of records</dd>
+            </div>
+            <div>
+              <dt>Heartbeats</dt>
+              <dd>Background thread</dd>
+            </div>
+            <div>
+              <dt>Liveness</dt>
+              <dd>max.poll.interval.ms</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre>props.put(<span class="s">"group.id"</span>, <span class="s">"billing-service"</span>);
+props.put(<span class="s">"key.deserializer"</span>,   <span class="t">StringDeserializer</span>.<span class="k">class</span>.getName());
+props.put(<span class="s">"value.deserializer"</span>, <span class="t">StringDeserializer</span>.<span class="k">class</span>.getName());
+props.put(<span class="s">"enable.auto.commit"</span>, <span class="k">false</span>);       <span class="c">// commit deliberately</span>
+props.put(<span class="s">"auto.offset.reset"</span>,  <span class="s">"earliest"</span>);  <span class="c">// only when no offset exists</span>
+
+<span class="k">try</span> (<span class="t">Consumer</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; consumer = <span class="k">new</span> <span class="t">KafkaConsumer</span>&lt;&gt;(props)) {
+    consumer.subscribe(<span class="t">List</span>.of(<span class="s">"orders"</span>));
+
+    <span class="k">while</span> (running) {
+        <span class="t">ConsumerRecords</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; records =
+            consumer.poll(<span class="t">Duration</span>.ofMillis(<span class="n">100</span>));
+
+        <span class="k">for</span> (<span class="t">ConsumerRecord</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; r : records) {
+            process(r.key(), r.value());     <span class="c">// must be FAST — see below</span>
+        }
+        consumer.commitSync();               <span class="c">// after processing = at-least-once</span>
+    }
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">The loop is also the heartbeat for liveness</span>
+            <p>
+              Heartbeats run on a background thread, so a slow
+              <code>process()</code> won't miss them — but
+              <code>max.poll.interval.ms</code> (5 minutes by default) measures
+              the gap between <em>polls</em>. Exceed it and the broker assumes
+              you're dead, kicks you out, and reassigns your partitions — while
+              you're still working on them. Either keep the batch fast, or lower
+              <code>max.poll.records</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ GROUPS ============ -->
+        <section id="groups">
+          <h2>Consumer groups</h2>
+          <p class="lede">
+            A group is a set of consumers sharing one <code>group.id</code>.
+            Kafka assigns each partition to
+            <strong>exactly one</strong> consumer in the group — which makes
+            partition count a hard ceiling on parallelism.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 270"
+                role="img"
+                aria-label="Four partitions distributed across two, four and five consumers, showing that a fifth consumer sits idle"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="16" font-size="10.5" fill="var(--ink-faint)">
+                    TOPIC WITH 4 PARTITIONS
+                  </text>
+
+                  <text
+                    x="12"
+                    y="44"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    2 consumers — 2 partitions each
+                  </text>
+                  <g>
+                    <rect
+                      x="12"
+                      y="52"
+                      width="76"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text x="50" y="70" text-anchor="middle" fill="var(--val)">
+                      P0 P1
+                    </text>
+                    <text
+                      x="96"
+                      y="70"
+                      font-size="10.5"
+                      fill="var(--ink-faint)"
+                    >
+                      → C1
+                    </text>
+                    <rect
+                      x="150"
+                      y="52"
+                      width="76"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text x="188" y="70" text-anchor="middle" fill="var(--val)">
+                      P2 P3
+                    </text>
+                    <text
+                      x="234"
+                      y="70"
+                      font-size="10.5"
+                      fill="var(--ink-faint)"
+                    >
+                      → C2
+                    </text>
+                    <text x="300" y="70" font-size="10.5" fill="var(--good)">
+                      ✓ balanced
+                    </text>
+                  </g>
+
+                  <line
+                    x1="12"
+                    y1="96"
+                    x2="688"
+                    y2="96"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text
+                    x="12"
+                    y="122"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    4 consumers — 1 each, maximum parallelism
+                  </text>
+                  <g>
+                    <rect
+                      x="12"
+                      y="130"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text x="38" y="148" text-anchor="middle" fill="var(--val)">
+                      P0
+                    </text>
+                    <rect
+                      x="76"
+                      y="130"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="102"
+                      y="148"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P1
+                    </text>
+                    <rect
+                      x="140"
+                      y="130"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="166"
+                      y="148"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P2
+                    </text>
+                    <rect
+                      x="204"
+                      y="130"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="230"
+                      y="148"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P3
+                    </text>
+                    <text x="270" y="148" font-size="10.5" fill="var(--good)">
+                      ✓ the sweet spot
+                    </text>
+                  </g>
+
+                  <line
+                    x1="12"
+                    y1="174"
+                    x2="688"
+                    y2="174"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text
+                    x="12"
+                    y="200"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    5 consumers — the fifth gets nothing
+                  </text>
+                  <g>
+                    <rect
+                      x="12"
+                      y="208"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text x="38" y="226" text-anchor="middle" fill="var(--val)">
+                      P0
+                    </text>
+                    <rect
+                      x="76"
+                      y="208"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="102"
+                      y="226"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P1
+                    </text>
+                    <rect
+                      x="140"
+                      y="208"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="166"
+                      y="226"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P2
+                    </text>
+                    <rect
+                      x="204"
+                      y="208"
+                      width="52"
+                      height="26"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="230"
+                      y="226"
+                      text-anchor="middle"
+                      fill="var(--val)"
+                    >
+                      P3
+                    </text>
+                    <rect
+                      x="268"
+                      y="208"
+                      width="76"
+                      height="26"
+                      rx="4"
+                      fill="none"
+                      stroke="var(--hot)"
+                      stroke-width="2"
+                      stroke-dasharray="5 4"
+                    />
+                    <text
+                      x="306"
+                      y="226"
+                      text-anchor="middle"
+                      font-size="10.5"
+                      fill="var(--hot)"
+                    >
+                      C5 idle
+                    </text>
+                    <text x="360" y="226" font-size="10.5" fill="var(--hot)">
+                      adding consumers past the partition count buys nothing
+                    </text>
+                  </g>
+
+                  <text x="12" y="260" font-size="10.5" fill="var(--ink-soft)">
+                    Different groups are independent: a second group reads the
+                    same partitions with its own offsets.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Scaling out is really scaling partitions.</b> To double
+              throughput you need double the partitions first; the consumers
+              follow. This is why undersized partition counts are so hard to
+              live with later.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ OFFSETS ============ -->
+        <section id="offsets">
+          <h2>Offsets and commits</h2>
+          <p class="lede">
+            A committed offset says "the group has finished everything before
+            this point". <em>When</em> you commit — before or after processing —
+            is the entire difference between losing messages and duplicating
+            them.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Committing before processing risks loss on a crash, committing after risks duplicates"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--hot)">
+                    COMMIT FIRST — at-most-once
+                  </text>
+                  <rect
+                    x="12"
+                    y="30"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="72"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    poll
+                  </text>
+                  <rect
+                    x="140"
+                    y="30"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="200"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    commit
+                  </text>
+                  <rect
+                    x="268"
+                    y="30"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="328"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    process
+                  </text>
+                  <text
+                    x="404"
+                    y="53"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    ✗ crash here → message never processed
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="88"
+                    x2="688"
+                    y2="88"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text x="12" y="114" font-size="11" fill="var(--val)">
+                    PROCESS FIRST — at-least-once (what you almost always want)
+                  </text>
+                  <rect
+                    x="12"
+                    y="126"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="72"
+                    y="149"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    poll
+                  </text>
+                  <rect
+                    x="140"
+                    y="126"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="200"
+                    y="149"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    process
+                  </text>
+                  <rect
+                    x="268"
+                    y="126"
+                    width="120"
+                    height="36"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="328"
+                    y="149"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    commit
+                  </text>
+                  <text
+                    x="404"
+                    y="149"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    crash here → reprocessed on restart
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="180"
+                    width="676"
+                    height="30"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="200"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    So make process() idempotent, and duplicates stop mattering.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>There is no third option without transactions.</b> Pick
+              at-least-once, then design the handler so running it twice is
+              harmless — an upsert keyed by event id, rather than a blind
+              insert.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// Auto-commit: every 5s in the background. Convenient, and it can</span>
+<span class="c">// both lose and duplicate, because the timer knows nothing about</span>
+<span class="c">// whether you finished processing.</span>
+props.put(<span class="s">"enable.auto.commit"</span>, <span class="k">true</span>);
+
+<span class="c">// Manual, synchronous — blocks, retries, throws on failure.</span>
+consumer.commitSync();
+
+<span class="c">// Manual, asynchronous — faster, no retry on failure.</span>
+consumer.commitAsync((offsets, ex) -&gt; { <span class="k">if</span> (ex != <span class="k">null</span>) log.warn(<span class="s">"…"</span>, ex); });
+
+<span class="c">// The standard shutdown pattern: async while running, sync at the end.</span>
+<span class="k">try</span> {
+    <span class="k">while</span> (running) { … consumer.commitAsync(); }
+} <span class="k">finally</span> {
+    <span class="k">try</span> { consumer.commitSync(); } <span class="k">finally</span> { consumer.close(); }
+}
+
+<span class="c">// Per-partition control when you need exact positions</span>
+consumer.commitSync(<span class="t">Map</span>.of(
+    <span class="k">new</span> <span class="t">TopicPartition</span>(<span class="s">"orders"</span>, <span class="n">0</span>),
+    <span class="k">new</span> <span class="t">OffsetAndMetadata</span>(lastProcessedOffset + <span class="n">1</span>)));   <span class="c">// note the +1</span></pre>
+          </div>
+
+          <p>
+            The <code>+1</code> matters: a committed offset is the
+            <em>next</em> record to read, not the last one processed. Committing
+            the offset you just handled makes you reprocess it forever.
+          </p>
+        </section>
+
+        <!-- ============ REBALANCE ============ -->
+        <section id="rebalance">
+          <h2>Rebalancing</h2>
+          <p class="lede">
+            When a consumer joins, leaves, or is presumed dead, partitions are
+            redistributed. Classically this stopped the whole group — and it's
+            the most common source of Kafka pain in production.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Trigger</th>
+                  <th>What happens</th>
+                  <th>Usually because</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>A consumer joins</td>
+                  <td>Partitions redistributed</td>
+                  <td>Scaling up, or a deploy</td>
+                </tr>
+                <tr>
+                  <td>A consumer leaves cleanly</td>
+                  <td>Its partitions reassigned</td>
+                  <td><code>close()</code> was called</td>
+                </tr>
+                <tr>
+                  <td>Heartbeat stops</td>
+                  <td>Evicted after <code>session.timeout.ms</code></td>
+                  <td>Crash, GC pause, network</td>
+                </tr>
+                <tr>
+                  <td>Poll gap too long</td>
+                  <td>Evicted after <code>max.poll.interval.ms</code></td>
+                  <td><b>Slow processing</b> — the usual culprit</td>
+                </tr>
+                <tr>
+                  <td>Topic gains partitions</td>
+                  <td>Redistributed</td>
+                  <td>Someone rescaled the topic</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Cooperative rebalancing moves only the partitions that must move,</span>
+<span class="c">// instead of revoking everything from everyone.</span>
+props.put(<span class="s">"partition.assignment.strategy"</span>,
+          <span class="t">CooperativeStickyAssignor</span>.<span class="k">class</span>.getName());
+
+<span class="c">// Hook in to flush state and commit before losing a partition.</span>
+consumer.subscribe(<span class="t">List</span>.of(<span class="s">"orders"</span>), <span class="k">new</span> <span class="t">ConsumerRebalanceListener</span>() {
+    <span class="k">public void</span> onPartitionsRevoked(<span class="t">Collection</span>&lt;<span class="t">TopicPartition</span>&gt; parts) {
+        consumer.commitSync();      <span class="c">// last chance before they move</span>
+    }
+    <span class="k">public void</span> onPartitionsAssigned(<span class="t">Collection</span>&lt;<span class="t">TopicPartition</span>&gt; parts) {
+        <span class="c">// warm caches, seek to a custom position, etc.</span>
+    }
+});</pre>
+          </div>
+
+          <p>
+            Newer Kafka versions are moving to a broker-coordinated protocol
+            (KIP-848) that removes most stop-the-world behaviour entirely. Check
+            what your cluster and client versions actually support before
+            relying on it — the rollout spans several releases.
+          </p>
+        </section>
+
+        <!-- ============ SEMANTICS ============ -->
+        <section id="semantics">
+          <h2>Delivery semantics</h2>
+          <p class="lede">
+            Three levels, and the honest summary is that most systems should
+            choose the middle one and make their handlers idempotent.
+          </p>
+
+          <div class="trio">
+            <div>
+              <h5>At-most-once</h5>
+              <p>
+                Commit before processing. Never duplicates, sometimes loses.
+                Acceptable for metrics, almost nothing else.
+              </p>
+            </div>
+            <div>
+              <h5>At-least-once</h5>
+              <p>
+                Commit after processing. Never loses, sometimes duplicates.
+                <b>The default choice.</b>
+              </p>
+            </div>
+            <div>
+              <h5>Exactly-once</h5>
+              <p>
+                Transactions across consume-process-produce. Real, but only
+                within Kafka — and it costs throughput.
+              </p>
+            </div>
+          </div>
+
+          <div class="note">
+            <span class="tag">What "exactly-once" actually covers</span>
+            <p>
+              Kafka's exactly-once applies to a
+              <strong>read-process-write cycle inside Kafka</strong>: consume
+              from a topic, produce to another topic, commit offsets, all
+              atomically. It does <em>not</em> extend to your database, your
+              payment provider, or the email you send. The moment your handler
+              touches an external system, you are back to at-least-once plus
+              idempotency — so build for that first.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ TRANSACTIONS ============ -->
+        <section id="transactions">
+          <h2>Transactions</h2>
+          <p class="lede">
+            An atomic write across multiple partitions, with the consumer's
+            offset commit folded into the same transaction.
+          </p>
+
+          <div class="code">
+            <pre>props.put(<span class="s">"transactional.id"</span>, <span class="s">"order-processor-1"</span>);   <span class="c">// stable, unique per instance</span>
+<span class="t">Producer</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; producer = <span class="k">new</span> <span class="t">KafkaProducer</span>&lt;&gt;(props);
+producer.initTransactions();
+
+<span class="k">while</span> (running) {
+    <span class="t">ConsumerRecords</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; records = consumer.poll(<span class="t">Duration</span>.ofMillis(<span class="n">100</span>));
+    producer.beginTransaction();
+    <span class="k">try</span> {
+        <span class="k">for</span> (<span class="t">var</span> r : records) {
+            producer.send(<span class="k">new</span> <span class="t">ProducerRecord</span>&lt;&gt;(<span class="s">"invoices"</span>, transform(r.value())));
+        }
+        <span class="c">// the offsets ride inside the transaction — this is the trick</span>
+        producer.sendOffsetsToTransaction(offsetsOf(records), consumer.groupMetadata());
+        producer.commitTransaction();
+    } <span class="k">catch</span> (<span class="t">KafkaException</span> e) {
+        producer.abortTransaction();     <span class="c">// nothing downstream sees it</span>
+    }
+}
+
+<span class="c">// The reader must opt in, or it will see aborted records too.</span>
+consumerProps.put(<span class="s">"isolation.level"</span>, <span class="s">"read_committed"</span>);</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Both halves or neither</span>
+            <p>
+              A downstream consumer with the default
+              <code>isolation.level=read_uncommitted</code> will happily read
+              records from transactions that were later aborted. Producing
+              transactionally while reading non-transactionally gives you all of
+              the cost and none of the guarantee.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ SERDE ============ -->
+        <section id="serde">
+          <h2>Serialization</h2>
+          <p class="lede">
+            Kafka moves bytes and has no opinion about them. Everything about
+            compatibility is your problem — which is what schema registries
+            exist to solve.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Format</th>
+                  <th>Schema</th>
+                  <th>Good for</th>
+                  <th>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">String / JSON</td>
+                  <td>None enforced</td>
+                  <td>Getting started, debugging</td>
+                  <td>Verbose; breaks silently on change</td>
+                </tr>
+                <tr>
+                  <td class="name">Avro</td>
+                  <td>Registry</td>
+                  <td>The common production choice</td>
+                  <td>Needs a schema registry</td>
+                </tr>
+                <tr>
+                  <td class="name">Protobuf</td>
+                  <td>Registry or compiled</td>
+                  <td>Polyglot shops, gRPC alongside</td>
+                  <td>Build-step coupling</td>
+                </tr>
+                <tr>
+                  <td class="name">ByteArray</td>
+                  <td>Yours</td>
+                  <td>Full control, custom framing</td>
+                  <td>You own every mistake</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// A custom serializer is just two methods.</span>
+<span class="k">public class</span> <span class="t">OrderSerializer</span> <span class="k">implements</span> <span class="t">Serializer</span>&lt;<span class="t">Order</span>&gt; {
+    <span class="k">private final</span> <span class="t">ObjectMapper</span> mapper = <span class="k">new</span> <span class="t">ObjectMapper</span>();
+
+    <span class="k">@Override public byte</span>[] serialize(<span class="t">String</span> topic, <span class="t">Order</span> data) {
+        <span class="k">if</span> (data == <span class="k">null</span>) <span class="k">return null</span>;
+        <span class="k">try</span> { <span class="k">return</span> mapper.writeValueAsBytes(data); }
+        <span class="k">catch</span> (<span class="t">Exception</span> e) { <span class="k">throw new</span> <span class="t">SerializationException</span>(e); }
+    }
+}
+
+<span class="c">// Schema compatibility is the thing that bites at 2am:</span>
+<span class="c">//   BACKWARD  — new readers can read old data   (add optional fields)</span>
+<span class="c">//   FORWARD   — old readers can read new data   (remove optional fields)</span>
+<span class="c">//   FULL      — both</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ RETENTION ============ -->
+        <section id="retention">
+          <h2>Retention and compaction</h2>
+          <p class="lede">
+            Two cleanup policies with completely different purposes: one throws
+            away old <em>time</em>, the other throws away old <em>versions</em>.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th class="name">cleanup.policy=delete</th>
+                  <th class="name">cleanup.policy=compact</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Keeps</td>
+                  <td>Everything newer than the limit</td>
+                  <td>The latest record per key, forever</td>
+                </tr>
+                <tr>
+                  <td>Controlled by</td>
+                  <td class="mono">retention.ms, retention.bytes</td>
+                  <td class="mono">min.cleanable.dirty.ratio</td>
+                </tr>
+                <tr>
+                  <td>Default</td>
+                  <td>7 days</td>
+                  <td>—</td>
+                </tr>
+                <tr>
+                  <td>Think of it as</td>
+                  <td>An event stream</td>
+                  <td>A changelog — a table in disguise</td>
+                </tr>
+                <tr>
+                  <td>Deletion</td>
+                  <td>By age</td>
+                  <td>By key, via a <b>tombstone</b> (null value)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Compaction is what makes a topic usable as durable state: replay it
+            from the beginning and you get the current value for every key that
+            has ever existed. That's exactly how Kafka Streams backs a
+            <code>KTable</code>, and how <code>__consumer_offsets</code> itself
+            works.
+          </p>
+        </section>
+
+        <!-- ============ FRAMEWORKS ============ -->
+        <section id="frameworks">
+          <h2>Spring and Streams</h2>
+          <p class="lede">
+            In practice most Java teams reach one of two layers above the raw
+            client.
+          </p>
+
+          <h3>Spring for Apache Kafka</h3>
+          <div class="code">
+            <pre><span class="k">@KafkaListener</span>(topics = <span class="s">"orders"</span>, groupId = <span class="s">"billing-service"</span>)
+<span class="k">public void</span> onOrder(<span class="t">ConsumerRecord</span>&lt;<span class="t">String</span>, <span class="t">Order</span>&gt; record,
+                    <span class="t">Acknowledgment</span> ack) {
+    process(record.value());
+    ack.acknowledge();          <span class="c">// with AckMode.MANUAL</span>
+}
+
+<span class="k">@Autowired</span> <span class="t">KafkaTemplate</span>&lt;<span class="t">String</span>, <span class="t">Order</span>&gt; template;
+template.send(<span class="s">"orders"</span>, order.userId(), order);
+
+<span class="c">// Retries and a dead-letter topic, declaratively</span>
+<span class="k">@RetryableTopic</span>(attempts = <span class="s">"3"</span>, backoff = <span class="k">@Backoff</span>(delay = <span class="n">2000</span>))</pre>
+          </div>
+
+          <h3>Kafka Streams</h3>
+          <p>
+            A library, not a cluster — it runs inside your JVM and uses Kafka
+            itself for state and fault tolerance.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">StreamsBuilder</span> b = <span class="k">new</span> <span class="t">StreamsBuilder</span>();
+
+b.&lt;<span class="t">String</span>, <span class="t">Order</span>&gt;stream(<span class="s">"orders"</span>)
+ .filter((k, v) -&gt; v.total() &gt; <span class="n">100</span>)
+ .groupByKey()
+ .aggregate(<span class="t">Totals</span>::empty, (k, v, agg) -&gt; agg.plus(v))   <span class="c">// a KTable</span>
+ .toStream()
+ .to(<span class="s">"big-spenders"</span>);
+
+<span class="c">// KStream = an event per record.  KTable = the latest value per key.</span>
+<span class="c">// exactly-once is one line here:</span>
+props.put(<span class="t">StreamsConfig</span>.PROCESSING_GUARANTEE_CONFIG, <span class="s">"exactly_once_v2"</span>);</pre>
+          </div>
+        </section>
+
+        <!-- ============ CONFIG ============ -->
+        <section id="config">
+          <h2>Configs that matter</h2>
+
+          <h4>Producer</h4>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Default</th>
+                  <th>Why you'd change it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">acks</td>
+                  <td class="mono">all</td>
+                  <td>Never lower it unless losing data is genuinely fine</td>
+                </tr>
+                <tr>
+                  <td class="name">enable.idempotence</td>
+                  <td class="mono">true</td>
+                  <td>Leave it on; setting acks=1 disables it</td>
+                </tr>
+                <tr>
+                  <td class="name">linger.ms</td>
+                  <td class="mono">0</td>
+                  <td>5–20ms buys a lot of throughput</td>
+                </tr>
+                <tr>
+                  <td class="name">batch.size</td>
+                  <td class="mono">16384</td>
+                  <td>Raise alongside linger.ms</td>
+                </tr>
+                <tr>
+                  <td class="name">compression.type</td>
+                  <td class="mono">none</td>
+                  <td>lz4 or zstd — usually a clear win</td>
+                </tr>
+                <tr>
+                  <td class="name">max.in.flight…</td>
+                  <td class="mono">5</td>
+                  <td>Must stay ≤5 for idempotent ordering</td>
+                </tr>
+                <tr>
+                  <td class="name">delivery.timeout.ms</td>
+                  <td class="mono">120000</td>
+                  <td>The real end-to-end send deadline</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Consumer</h4>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Default</th>
+                  <th>Why you'd change it</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">enable.auto.commit</td>
+                  <td class="mono">true</td>
+                  <td>Turn it off and commit deliberately</td>
+                </tr>
+                <tr>
+                  <td class="name">auto.offset.reset</td>
+                  <td class="mono">latest</td>
+                  <td><code>earliest</code> if a new group must see history</td>
+                </tr>
+                <tr>
+                  <td class="name">max.poll.records</td>
+                  <td class="mono">500</td>
+                  <td>Lower it when processing is slow</td>
+                </tr>
+                <tr>
+                  <td class="name">max.poll.interval.ms</td>
+                  <td class="mono">300000</td>
+                  <td>The rebalance trigger everyone hits</td>
+                </tr>
+                <tr>
+                  <td class="name">session.timeout.ms</td>
+                  <td class="mono">45000</td>
+                  <td>Failure detection speed</td>
+                </tr>
+                <tr>
+                  <td class="name">isolation.level</td>
+                  <td class="mono">read_uncommitted</td>
+                  <td>
+                    <code>read_committed</code> whenever producers use
+                    transactions
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Choosing quickly</h4>
+          <ul class="pick">
+            <li>
+              <span class="want">Events for one entity must stay in order</span
+              ><span class="use">key = entity id</span>
+            </li>
+            <li>
+              <span class="want">I must not lose a record</span
+              ><span class="use">acks=all + min.insync=2</span>
+            </li>
+            <li>
+              <span class="want">I need more consumer throughput</span
+              ><span class="use">more partitions</span>
+            </li>
+            <li>
+              <span class="want">Duplicates would be harmful</span
+              ><span class="use">idempotent handler</span>
+            </li>
+            <li>
+              <span class="want">Atomic consume-process-produce</span
+              ><span class="use">transactions</span>
+            </li>
+            <li>
+              <span class="want">The topic is really a lookup table</span
+              ><span class="use">cleanup.policy=compact</span>
+            </li>
+            <li>
+              <span class="want">Rebalances keep stalling the group</span
+              ><span class="use">CooperativeStickyAssignor</span>
+            </li>
+            <li>
+              <span class="want">A poison message blocks the partition</span
+              ><span class="use">dead-letter topic</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Sharing a consumer across threads</h3>
+          <p>
+            <code>KafkaProducer</code> is thread-safe;
+            <code>KafkaConsumer</code> is emphatically not. It throws
+            <code>ConcurrentModificationException</code> if it catches you, but
+            the checking isn't exhaustive. One consumer per thread, or hand
+            records to a worker pool <em>and</em> take over offset management
+            yourself — because once processing is asynchronous, "commit after
+            processing" no longer means anything.
+          </p>
+
+          <h3>Expecting ordering across a topic</h3>
+          <p>
+            Ordering exists only inside a partition. A null key spreads records
+            across all of them, so two events for the same user can be processed
+            out of order by different consumers. If order matters, key by the
+            entity the order is about.
+          </p>
+
+          <h3>Slow processing causing endless rebalances</h3>
+          <div class="code">
+            <pre><span class="c">// 500 records × 2s each = 1000s ≫ max.poll.interval.ms (300s)</span>
+<span class="c">// → evicted mid-batch → partitions reassigned → the replacement</span>
+<span class="c">//   is just as slow → the group never stabilises.</span>
+
+props.put(<span class="s">"max.poll.records"</span>, <span class="n">50</span>);              <span class="c">// smaller bites</span>
+props.put(<span class="s">"max.poll.interval.ms"</span>, <span class="n">600000</span>);      <span class="c">// or a longer deadline</span></pre>
+          </div>
+
+          <h3>Committing the offset you just processed</h3>
+          <p>
+            A committed offset is the <em>next</em> record to read. Commit
+            <code>lastProcessed</code> instead of
+            <code>lastProcessed + 1</code> and that record is redelivered on
+            every restart, forever.
+          </p>
+
+          <h3>A poison message parked in front of the partition</h3>
+          <p>
+            One record that always throws blocks everything behind it —
+            partition ordering guarantees it. Without a dead-letter topic or a
+            skip-after-N-attempts rule, that partition stops permanently while
+            the others carry on, which makes the failure look intermittent.
+          </p>
+
+          <h3>Forgetting <code>close()</code></h3>
+          <p>
+            The producer buffers. Kill the process without closing and whatever
+            hadn't been flushed is gone — with no error, because
+            <code>send()</code> returned successfully long before. Use
+            try-with-resources, and register a shutdown hook for long-lived
+            producers.
+          </p>
+
+          <h3>Setting <code>acks=1</code> for speed</h3>
+          <p>
+            It looks like a cheap latency win. It also silently disables
+            idempotence and accepts data loss on any leader failover. If the
+            write matters, the cost of <code>acks=all</code> is smaller than you
+            expect — the followers replicate in parallel.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              It's a log. Order lives in the partition, parallelism is capped by
+              the partition count, and the offset is just a number you control.
+              Produce with <code>acks=all</code>, consume with manual commits
+              after processing, make the handler idempotent, and you have
+              covered most of what goes wrong in production.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

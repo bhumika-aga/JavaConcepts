@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Java Concurrency Primer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <a href="#fact">The one fact</a>
+          <a href="#three">Three problems</a>
+          <a href="#tools">Five tools</a>
+          <a href="#choose">What to reach for</a>
+          <a href="#rules">Seven rules</a>
+          <a href="#next">Where to go next</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            java concurrency &middot; the twenty-minute version
+          </p>
+          <h1>Java Concurrency Primer</h1>
+          <p class="dek">
+            The short form: one fact that causes all the trouble, three distinct
+            problems it creates, and the five tools that solve them. Everything
+            here is expanded at length in <em>Inside Java Threads</em>.
+          </p>
+        </header>
+
+        <!-- ============ FACT ============ -->
+        <section id="fact">
+          <h2>The one fact</h2>
+          <p class="lede">
+            Every thread gets its own stack. All threads share one heap. That
+            single asymmetry is the source of every concurrency bug you will
+            ever write.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Three threads with private stacks all reading and writing one shared heap"
+              >
+                <defs>
+                  <marker
+                    id="p1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--good)">
+                    PRIVATE — safe by construction, no locking needed
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="30"
+                    width="206"
+                    height="56"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="117"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    thread 1 stack
+                  </text>
+                  <text
+                    x="117"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    locals, frames
+                  </text>
+
+                  <rect
+                    x="246"
+                    y="30"
+                    width="206"
+                    height="56"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="349"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    thread 2 stack
+                  </text>
+                  <text
+                    x="349"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    locals, frames
+                  </text>
+
+                  <rect
+                    x="478"
+                    y="30"
+                    width="206"
+                    height="56"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="581"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    thread 3 stack
+                  </text>
+                  <text
+                    x="581"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--key)"
+                  >
+                    locals, frames
+                  </text>
+
+                  <line
+                    x1="117"
+                    y1="90"
+                    x2="117"
+                    y2="126"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#p1)"
+                  />
+                  <line
+                    x1="349"
+                    y1="90"
+                    x2="349"
+                    y2="126"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#p1)"
+                  />
+                  <line
+                    x1="581"
+                    y1="90"
+                    x2="581"
+                    y2="126"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#p1)"
+                  />
+
+                  <rect
+                    x="14"
+                    y="130"
+                    width="670"
+                    height="60"
+                    rx="10"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="349"
+                    y="156"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    THE SHARED HEAP — every object, one copy
+                  </text>
+                  <text
+                    x="349"
+                    y="178"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--hot)"
+                  >
+                    everything dangerous lives here, and nowhere else
+                  </text>
+
+                  <text x="12" y="212" font-size="11" fill="var(--ink-soft)">
+                    A local primitive can never be raced. Trouble begins the
+                    moment two threads can reach the same object.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The corollary is the best design advice in the subject:</b> if
+              nothing is shared, nothing needs synchronising. Immutability and
+              confinement remove problems rather than managing them.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ THREE ============ -->
+        <section id="three">
+          <h2>Three problems, not one</h2>
+          <p class="lede">
+            These are independent. Fixing atomicity does nothing for visibility,
+            and neither addresses ordering. Most confusion comes from treating
+            them as one thing.
+          </p>
+
+          <div class="trio">
+            <div>
+              <h5>Atomicity</h5>
+              <p>
+                An operation you think is one step is several.
+                <code>count++</code> is read, add, write — another thread slips
+                between them.
+              </p>
+            </div>
+            <div>
+              <h5>Visibility</h5>
+              <p>
+                A write by one thread may never reach another. Not late —
+                potentially never, because the JIT can hoist the read out of the
+                loop.
+              </p>
+            </div>
+            <div>
+              <h5>Ordering</h5>
+              <p>
+                The compiler and CPU reorder independent instructions. Another
+                thread can observe your steps in a different sequence.
+              </p>
+            </div>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Atomicity — two threads, both read 4, both write 5. One increment lost.</span>
+count++;
+
+<span class="c">// Visibility — this can spin forever; nothing forces a re-read.</span>
+<span class="k">private boolean</span> stopped = <span class="k">false</span>;
+<span class="k">while</span> (!stopped) { }
+
+<span class="c">// Ordering — the reader may see ready==true before config is built.</span>
+config = <span class="k">new</span> <span class="t">Config</span>();
+ready  = <span class="k">true</span>;</pre>
+          </div>
+
+          <p>
+            And three ways to be stuck rather than wrong:
+            <strong>deadlock</strong> (two threads each hold what the other
+            needs), <strong>livelock</strong> (both keep yielding, neither
+            progresses), and <strong>starvation</strong> (one thread never gets
+            its turn).
+          </p>
+        </section>
+
+        <!-- ============ TOOLS ============ -->
+        <section id="tools">
+          <h2>Five tools</h2>
+          <p class="lede">
+            Almost all correct concurrent Java is built from these. Reach for
+            them in roughly this order.
+          </p>
+
+          <h3>1 &middot; Immutability — the one that removes the problem</h3>
+          <div class="code">
+            <pre><span class="k">record</span> <span class="t">Point</span>(<span class="k">int</span> x, <span class="k">int</span> y) { }        <span class="c">// cannot be raced, ever</span>
+
+<span class="c">// "Changing" it means swapping the reference atomically</span>
+<span class="t">AtomicReference</span>&lt;<span class="t">Config</span>&gt; cfg = <span class="k">new</span> <span class="t">AtomicReference</span>&lt;&gt;(initial);
+cfg.updateAndGet(c -&gt; c.withTimeout(<span class="n">30</span>));</pre>
+          </div>
+
+          <h3>2 &middot; <code>synchronized</code> — mutual exclusion</h3>
+          <div class="code">
+            <pre><span class="k">private final</span> <span class="t">Object</span> lock = <span class="k">new</span> <span class="t">Object</span>();   <span class="c">// private — nobody outside can grab it</span>
+
+<span class="k">void</span> transfer() {
+    <span class="k">synchronized</span> (lock) { <span class="c">/* keep this short; never do I/O here */</span> }
+}</pre>
+          </div>
+
+          <h3>
+            3 &middot; <code>volatile</code> — visibility for a single field
+          </h3>
+          <div class="code">
+            <pre><span class="k">private volatile boolean</span> stopped = <span class="k">false</span>;   <span class="c">// the loop now terminates</span>
+
+<span class="c">// It publishes everything written BEFORE it, too — which is why</span>
+<span class="c">// the flag pattern works. But it is NOT a lock: volatile count++</span>
+<span class="c">// is still broken.</span></pre>
+          </div>
+
+          <h3>4 &middot; Atomics — lock-free counters</h3>
+          <div class="code">
+            <pre><span class="t">AtomicInteger</span> hits = <span class="k">new</span> <span class="t">AtomicInteger</span>();
+hits.incrementAndGet();
+hits.updateAndGet(v -&gt; v * <span class="n">2</span>);
+
+<span class="t">LongAdder</span> busy = <span class="k">new</span> <span class="t">LongAdder</span>();   <span class="c">// better under heavy write contention</span></pre>
+          </div>
+
+          <h3>
+            5 &middot; <code>java.util.concurrent</code> — don't build your own
+          </h3>
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; shared = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();
+shared.merge(key, <span class="n">1</span>, <span class="t">Integer</span>::sum);          <span class="c">// atomic counter</span>
+
+<span class="t">BlockingQueue</span>&lt;<span class="t">Job</span>&gt; work = <span class="k">new</span> <span class="t">ArrayBlockingQueue</span>&lt;&gt;(<span class="n">100</span>);   <span class="c">// bounded!</span>
+
+<span class="k">try</span> (<span class="t">ExecutorService</span> pool = <span class="t">Executors</span>.newVirtualThreadPerTaskExecutor()) {
+    pool.submit(() -&gt; handle(request));      <span class="c">// Java 21+</span>
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ CHOOSE ============ -->
+        <section id="choose">
+          <h2>What to reach for</h2>
+          <ul class="pick">
+            <li>
+              <span class="want">Shared state that never changes</span
+              ><span class="use">record / final</span>
+            </li>
+            <li>
+              <span class="want">A counter many threads bump</span
+              ><span class="use">LongAdder</span>
+            </li>
+            <li>
+              <span class="want">A flag one thread sets, another reads</span
+              ><span class="use">volatile</span>
+            </li>
+            <li>
+              <span class="want">Several fields that must change together</span
+              ><span class="use">synchronized</span>
+            </li>
+            <li>
+              <span class="want">A map many threads share</span
+              ><span class="use">ConcurrentHashMap</span>
+            </li>
+            <li>
+              <span class="want">Hand work between threads</span
+              ><span class="use">ArrayBlockingQueue</span>
+            </li>
+            <li>
+              <span class="want">Run many independent tasks</span
+              ><span class="use">ExecutorService</span>
+            </li>
+            <li>
+              <span class="want">Thousands of blocking I/O calls</span
+              ><span class="use">virtual threads</span>
+            </li>
+            <li>
+              <span class="want">Cap concurrent access to a resource</span
+              ><span class="use">Semaphore</span>
+            </li>
+            <li>
+              <span class="want">Wait for N tasks to finish</span
+              ><span class="use">CountDownLatch</span>
+            </li>
+          </ul>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Guarantee</th>
+                  <th class="mono">volatile</th>
+                  <th class="mono">synchronized</th>
+                  <th class="mono">Atomic*</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Visibility of writes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Prevents reordering</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Atomic read-modify-write</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Mutual exclusion</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td>Can block a thread</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ RULES ============ -->
+        <section id="rules">
+          <h2>Seven rules</h2>
+          <ol class="path">
+            <li>
+              <b>Don't share mutable state </b
+              ><span
+                >Immutability and thread confinement eliminate bugs instead of
+                managing them. Always try this first.</span
+              >
+            </li>
+            <li>
+              <b>Never share a plain HashMap or ArrayList</b
+              ><span
+                >Concurrent writes corrupt internal structure, not just data.
+                Use the concurrent collections.</span
+              >
+            </li>
+            <li>
+              <b>Two atomic calls are not one atomic operation</b
+              ><span
+                ><code>containsKey</code> then <code>put</code> has a gap. Use
+                <code>merge</code>, <code>compute</code>, or
+                <code>putIfAbsent</code>.</span
+              >
+            </li>
+            <li>
+              <b>Keep critical sections tiny</b
+              ><span
+                >Never perform I/O, call unknown code, or block while holding a
+                lock. Everyone queues behind you.</span
+              >
+            </li>
+            <li>
+              <b>Always acquire locks in the same order</b
+              ><span
+                >The single habit that prevents deadlock. Enforce it once and a
+                cycle becomes impossible.</span
+              >
+            </li>
+            <li>
+              <b>Every blocking call gets a timeout</b
+              ><span
+                ><code>future.get()</code> with no deadline lets one stuck task
+                hang the caller forever.</span
+              >
+            </li>
+            <li>
+              <b>Never swallow InterruptedException</b
+              ><span
+                >Rethrow it, or restore the flag with
+                <code>Thread.currentThread().interrupt()</code>. An empty catch
+                here breaks cancellation everywhere.</span
+              >
+            </li>
+          </ol>
+
+          <div class="note danger">
+            <span class="tag">The most common single mistake</span>
+            <p>
+              Treating <code>volatile</code> as a lightweight lock. It
+              guarantees you read the <em>latest</em> value; it does nothing to
+              stop another thread reading that same latest value and racing you
+              to write. For anything read-modify-write, you need an atomic class
+              or a lock.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ NEXT ============ -->
+        <section id="next">
+          <h2>Where to go next</h2>
+          <p class="lede">
+            This page is the on-ramp. The full treatment — the memory model and
+            happens-before, lock internals, the whole
+            <code>java.util.concurrent</code> toolkit, executor tuning,
+            <code>CompletableFuture</code>, and virtual threads — is in the
+            companion lecture.
+          </p>
+
+          <p>
+            <a
+              href="https://claude.ai/code/artifact/fa378f84-456e-4e64-98b9-c415293f67a6"
+              ><strong>Inside Java Threads →</strong></a
+            >
+            &nbsp;12 parts, timing diagrams, and a gotchas table.
+          </p>
+
+          <div class="note">
+            <span class="tag">If you remember one thing</span>
+            <p>
+              Concurrent code runs in <em>an</em> order, and only the orderings
+              you explicitly constrain are guaranteed. Every tool on this page
+              is a way of constraining one.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,260 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="250"
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="Candidate auto-configurations are loaded from a file in each jar, filtered by conditions, and only the matching ones register beans"><style>svg{--bg:#F3F5F1; --surface:#FBFCFA; --surface-2:#E9EDE6; --ink:#15191B; --ink-soft:#59635F; --ink-faint:#808A85; --rule:#D6DCD3; --rule-strong:#B9C2B5; --key:#A85B00; --key-bg:#F6E8D5; --val:#0B6E75; --val-bg:#D8ECEC; --hot:#B33A2B; --hot-bg:#F7E2DE; --tree:#5E4B8B; --tree-bg:#E7E2F2; --good:#2F6B43;}@media(prefers-color-scheme:dark){svg{--bg:#13181A; --surface:#1A2023; --surface-2:#222A2D; --ink:#E9ECE8; --ink-soft:#A3ADA8; --ink-faint:#7C8782; --rule:#2B3336; --rule-strong:#3D4749; --key:#E5A75B; --key-bg:#3A2C17; --val:#4FC7D2; --val-bg:#123034; --hot:#E87862; --hot-bg:#3B211C; --tree:#AC9BDB; --tree-bg:#2A2440; --good:#6FBF8B;}}</style>
+                <defs>
+                  <marker
+                    id="b1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto">
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="40"
+                    width="150"
+                    height="64"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="87"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)">
+                    each jar ships
+                  </text>
+                  <text
+                    x="87"
+                    y="78"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)">
+                    AutoConfiguration
+                  </text>
+                  <text
+                    x="87"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)">
+                    .imports
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="166"
+                      y1="72"
+                      x2="196"
+                      y2="72"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+
+                  <rect
+                    x="200"
+                    y="40"
+                    width="150"
+                    height="64"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="275"
+                    y="66"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)">
+                    ~150 candidates
+                  </text>
+                  <text
+                    x="275"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--key)">
+                    names only, not loaded yet
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="354"
+                      y1="72"
+                      x2="384"
+                      y2="72"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+
+                  <rect
+                    x="388"
+                    y="34"
+                    width="150"
+                    height="76"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="463"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)">
+                    evaluate
+                  </text>
+                  <text
+                    x="463"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)">
+                    @Conditional
+                  </text>
+                  <text
+                    x="463"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)">
+                    cheap checks first
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="542"
+                      y1="58"
+                      x2="572"
+                      y2="46"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+                  <rect
+                    x="576"
+                    y="24"
+                    width="110"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="631"
+                    y="42"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)">
+                    matched
+                  </text>
+                  <text
+                    x="631"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)">
+                    beans registered
+                  </text>
+
+                  <g color="var(--ink-faint)">
+                    <line
+                      x1="542"
+                      y1="86"
+                      x2="572"
+                      y2="98"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+                  <rect
+                    x="576"
+                    y="80"
+                    width="110"
+                    height="42"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="631"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)">
+                    skipped
+                  </text>
+                  <text
+                    x="631"
+                    y="113"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)">
+                    costs nothing
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="140"
+                    width="674"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)">
+                    Your own beans are registered BEFORE auto-configuration
+                    runs.
+                  </text>
+                  <text
+                    x="350"
+                    y="174"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)">
+                    That ordering is the entire reason @ConditionalOnMissingBean
+                    works.
+                  </text>
+
+                  <text x="12" y="208" font-size="10.5" fill="var(--ink-soft)">
+                    Boot 2.7+ and 3.x read
+                    META-INF/spring/…AutoConfiguration.imports.
+                  </text>
+                  <text x="12" y="226" font-size="10.5" fill="var(--ink-soft)">
+                    Older versions used spring.factories — you will still meet
+                    it in third-party libraries.
+                  </text>
+                </g>
+              </svg>

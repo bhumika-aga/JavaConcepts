@@ -1,0 +1,2564 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Spring</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The idea</div>
+          <a href="#ioc">Inversion of control</a>
+          <a href="#container">The container</a>
+          <a href="#di">Dependency injection</a>
+          <div class="grp">Beans</div>
+          <a href="#scopes">Scopes</a>
+          <a href="#config">Declaring beans</a>
+          <a href="#lifecycle">The bean lifecycle</a>
+          <div class="grp">The magic</div>
+          <a href="#proxies">Proxies and AOP</a>
+          <a href="#tx">@Transactional</a>
+          <div class="grp">Boot &amp; web</div>
+          <a href="#boot">Spring Boot</a>
+          <a href="#mvc">Spring MVC</a>
+          <a href="#data">Data access</a>
+          <a href="#testing">Testing</a>
+          <div class="grp">Reference</div>
+          <a href="#versions">Spring 6 and Boot 3</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            spring framework &middot; container, proxies, boot
+          </p>
+          <h1>Inside Spring</h1>
+          <p class="dek">
+            Spring has a reputation for magic. It isn't magic — it's
+            <em>a container that builds your objects</em> and
+            <em>a proxy that wraps them</em>. Almost every surprising behaviour,
+            and every annotation that mysteriously does nothing, comes back to
+            one of those two.
+          </p>
+        </header>
+
+        <!-- ============ IOC ============ -->
+        <section id="ioc">
+          <h2>Inversion of control</h2>
+          <p class="lede">
+            Normally your code creates what it needs. With Spring, something
+            else creates it and hands it to you — so your class states
+            <em>what</em> it depends on and never decides
+            <em>which</em> implementation or <em>how</em> to build it.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="Without a container a service constructs its own dependencies and is welded to them; with a container the service declares what it needs and the container supplies it"
+              >
+                <defs>
+                  <marker
+                    id="s1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--hot)">
+                    WITHOUT — the service builds its own
+                  </text>
+                  <rect
+                    x="12"
+                    y="30"
+                    width="300"
+                    height="76"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text x="28" y="52" font-size="11" fill="var(--ink)">
+                    class OrderService {
+                  </text>
+                  <text x="28" y="70" font-size="11" fill="var(--hot)">
+                    Repo r = new MySqlRepo();
+                  </text>
+                  <text x="28" y="88" font-size="11" fill="var(--hot)">
+                    Mailer m = new SmtpMailer();
+                  </text>
+                  <text x="12" y="128" font-size="10.5" fill="var(--ink-soft)">
+                    Welded to MySQL and SMTP.
+                  </text>
+                  <text x="12" y="146" font-size="10.5" fill="var(--ink-soft)">
+                    Untestable without both running.
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="170"
+                    x2="688"
+                    y2="170"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text x="360" y="18" font-size="11" fill="var(--val)">
+                    WITH — it just asks
+                  </text>
+                  <rect
+                    x="360"
+                    y="30"
+                    width="328"
+                    height="76"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text x="376" y="52" font-size="11" fill="var(--ink)">
+                    class OrderService {
+                  </text>
+                  <text x="376" y="70" font-size="11" fill="var(--val)">
+                    OrderService(Repo r, Mailer m)
+                  </text>
+                  <text x="376" y="88" font-size="11" fill="var(--ink)">}</text>
+                  <text x="360" y="128" font-size="10.5" fill="var(--ink-soft)">
+                    Swap either one freely.
+                  </text>
+                  <text x="360" y="146" font-size="10.5" fill="var(--ink-soft)">
+                    Test with plain fakes, no Spring.
+                  </text>
+
+                  <rect
+                    x="180"
+                    y="188"
+                    width="340"
+                    height="42"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="214"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    the container decides and supplies
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The payoff is testability, not cleverness.</b> A class that
+              receives its dependencies can be unit-tested with two lines and no
+              framework at all — which is the strongest argument for constructor
+              injection later on.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ CONTAINER ============ -->
+        <section id="container">
+          <h2>The container</h2>
+          <p class="lede">
+            The <code>ApplicationContext</code> is a registry of objects Spring
+            built and manages. Those objects are <strong>beans</strong> — an
+            ordinary Java object plus a definition telling Spring how to make
+            it.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Interface</dt>
+              <dd>ApplicationContext</dd>
+            </div>
+            <div>
+              <dt>Holds</dt>
+              <dd>Bean definitions + instances</dd>
+            </div>
+            <div>
+              <dt>Default scope</dt>
+              <dd>Singleton</dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>Eagerly, at startup</dd>
+            </div>
+            <div>
+              <dt>A bean is</dt>
+              <dd>A normal object</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="c">// A bean is nothing special — no interface, no base class.</span>
+<span class="k">@Service</span>
+<span class="k">public class</span> <span class="t">OrderService</span> {
+    <span class="k">private final</span> <span class="t">OrderRepository</span> repo;
+
+    <span class="c">// Since Spring 4.3, a single constructor needs no @Autowired.</span>
+    <span class="k">public</span> <span class="t">OrderService</span>(<span class="t">OrderRepository</span> repo) { <span class="k">this</span>.repo = repo; }
+}
+
+<span class="c">// Spring finds it, builds it, wires it, and keeps one instance.</span>
+<span class="t">ApplicationContext</span> ctx = <span class="t">SpringApplication</span>.run(<span class="t">App</span>.<span class="k">class</span>, args);
+<span class="t">OrderService</span> svc = ctx.getBean(<span class="t">OrderService</span>.<span class="k">class</span>);</pre>
+          </div>
+
+          <p>
+            Beans are created <strong>eagerly at startup</strong>, not on first
+            use. That's deliberate: a missing dependency or a bad config fails
+            the moment the app boots, rather than at 3am on the first request
+            that touches it.
+          </p>
+        </section>
+
+        <!-- ============ DI ============ -->
+        <section id="di">
+          <h2>Dependency injection</h2>
+          <p class="lede">
+            Three ways to receive dependencies. One is right, one is
+            situational, and one is a habit worth breaking.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Style</th>
+                  <th>Looks like</th>
+                  <th>Verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Constructor</td>
+                  <td class="mono">Svc(Repo r)</td>
+                  <td>
+                    <b>Use this.</b> Fields can be final, object is never
+                    half-built, and it's testable with <code>new</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">Setter</td>
+                  <td class="mono">@Autowired setRepo(…)</td>
+                  <td>
+                    Only for genuinely optional or reconfigurable dependencies
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">Field</td>
+                  <td class="mono">@Autowired Repo repo;</td>
+                  <td class="n">
+                    Avoid. Can't be final, can't construct in a test, hides how
+                    many deps you have
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// ✓ Constructor — the object is valid the instant it exists</span>
+<span class="k">@Service</span>
+<span class="k">class</span> <span class="t">OrderService</span> {
+    <span class="k">private final</span> <span class="t">Repo</span> repo;
+    <span class="t">OrderService</span>(<span class="t">Repo</span> repo) { <span class="k">this</span>.repo = repo; }
+}
+<span class="c">// test: new OrderService(new FakeRepo());   — no Spring needed</span>
+
+<span class="c">// ✗ Field — compiles, runs, and quietly hurts</span>
+<span class="k">@Service</span>
+<span class="k">class</span> <span class="t">OrderService</span> {
+    <span class="k">@Autowired private</span> <span class="t">Repo</span> repo;    <span class="c">// not final; null in a plain unit test</span>
+}
+
+<span class="c">// Several candidates for one type? Disambiguate.</span>
+<span class="k">@Primary</span>                        <span class="c">// the default winner</span>
+<span class="k">@Qualifier</span>(<span class="s">"fast"</span>)              <span class="c">// or pick by name at the injection point</span></pre>
+          </div>
+
+          <div class="note">
+            <span class="tag"
+              >Constructor injection kills circular dependencies at compile
+              time</span
+            >
+            <p>
+              Two beans that need each other in their constructors
+              <em>cannot both be built first</em>, so Spring fails at startup
+              with a clear message. Field injection hides the cycle by building
+              both empty and filling them in afterwards. Spring Boot 2.6+
+              rejects circular references by default — and the right fix is
+              almost always to extract the shared logic into a third bean, not
+              to set <code>spring.main.allow-circular-references=true</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ SCOPES ============ -->
+        <section id="scopes">
+          <h2>Scopes</h2>
+          <p class="lede">
+            How many instances the container keeps. The default is
+            <strong>one</strong>, and forgetting that is the source of a whole
+            family of bugs.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scope</th>
+                  <th>Instances</th>
+                  <th>Use for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">singleton</td>
+                  <td>One per container <b>(default)</b></td>
+                  <td>Nearly everything — services, repositories</td>
+                </tr>
+                <tr>
+                  <td class="name">prototype</td>
+                  <td>A new one per injection/lookup</td>
+                  <td>Stateful helpers</td>
+                </tr>
+                <tr>
+                  <td class="name">request</td>
+                  <td>One per HTTP request</td>
+                  <td>Per-request context</td>
+                </tr>
+                <tr>
+                  <td class="name">session</td>
+                  <td>One per HTTP session</td>
+                  <td>Per-user state</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Singletons are shared by every thread</span>
+            <p>
+              One instance serves every concurrent request, so a mutable field
+              on a <code>@Service</code> is shared mutable state across threads
+              — the exact hazard from <em>Inside Java Threads</em>. Keep beans
+              stateless; put per-request data in method parameters and locals,
+              which live on the calling thread's own stack.
+            </p>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// ✗ One instance, many threads, one field. A classic race.</span>
+<span class="k">@Service</span>
+<span class="k">class</span> <span class="t">ReportService</span> {
+    <span class="k">private</span> <span class="t">String</span> currentUser;        <span class="c">// shared by everyone at once</span>
+    <span class="t">Report</span> build(<span class="t">String</span> user) { <span class="k">this</span>.currentUser = user; … }
+}
+
+<span class="c">// ✓ Stateless — the parameter lives on the caller's stack</span>
+<span class="k">@Service</span>
+<span class="k">class</span> <span class="t">ReportService</span> {
+    <span class="t">Report</span> build(<span class="t">String</span> user) { … }
+}
+
+<span class="c">// Injecting a prototype into a singleton gives you ONE instance forever —</span>
+<span class="c">// it is injected once, at startup. Ask the container each time instead:</span>
+<span class="k">private final</span> <span class="t">ObjectProvider</span>&lt;<span class="t">Job</span>&gt; jobs;
+<span class="t">Job</span> j = jobs.getObject();      <span class="c">// a genuinely fresh one</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ CONFIG ============ -->
+        <section id="config">
+          <h2>Declaring beans</h2>
+          <p class="lede">
+            Two styles in modern Spring: annotate your own classes, or write a
+            factory method for things you don't own.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// 1 — Stereotypes on your own classes, found by component scanning.</span>
+<span class="k">@Component</span>     <span class="c">// the generic one</span>
+<span class="k">@Service</span>       <span class="c">// business logic      — same behaviour, better intent</span>
+<span class="k">@Repository</span>    <span class="c">// data access         — also translates SQL exceptions</span>
+<span class="k">@Controller</span>    <span class="c">// web endpoint</span>
+
+<span class="c">// 2 — @Bean methods, for third-party classes you can't annotate.</span>
+<span class="k">@Configuration</span>
+<span class="k">class</span> <span class="t">AppConfig</span> {
+    <span class="k">@Bean</span>
+    <span class="t">RestClient</span> restClient(<span class="t">Builder</span> b) {
+        <span class="k">return</span> b.baseUrl(<span class="s">"https://api.example.com"</span>).build();
+    }
+
+    <span class="k">@Bean</span>
+    <span class="k">@ConditionalOnMissingBean</span>       <span class="c">// only if nobody else defined one</span>
+    <span class="t">Clock</span> clock() { <span class="k">return</span> <span class="t">Clock</span>.systemUTC(); }
+}
+
+<span class="c">// Profiles switch whole sets of beans per environment.</span>
+<span class="k">@Profile</span>(<span class="s">"!prod"</span>)
+<span class="k">@Bean</span> <span class="t">Mailer</span> loggingMailer() { <span class="k">return</span> <span class="t">System</span>.out::println; }</pre>
+          </div>
+
+          <p>
+            Scanning starts at the package of your
+            <code>@SpringBootApplication</code> class and walks downward. A bean
+            in a sibling package simply isn't found — which is why the main
+            class belongs at the root of your package tree.
+          </p>
+        </section>
+
+        <!-- ============ LIFECYCLE ============ -->
+        <section id="lifecycle">
+          <h2>The bean lifecycle</h2>
+          <p class="lede">
+            Between "constructor returns" and "your code runs" there are several
+            steps — and knowing them explains why a field is still null in a
+            constructor.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="The bean lifecycle from instantiation through dependency injection, post-processors, initialisation callbacks, use, and destruction"
+              >
+                <defs>
+                  <marker
+                    id="s2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="34"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="88"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    1 · constructor
+                  </text>
+                  <text
+                    x="88"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    ctor deps arrive here
+                  </text>
+
+                  <line
+                    x1="168"
+                    y1="54"
+                    x2="196"
+                    y2="54"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+
+                  <rect
+                    x="200"
+                    y="34"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="276"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    2 · inject fields
+                  </text>
+                  <text
+                    x="276"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    @Autowired, setters
+                  </text>
+
+                  <line
+                    x1="356"
+                    y1="54"
+                    x2="384"
+                    y2="54"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+
+                  <rect
+                    x="388"
+                    y="34"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="464"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    3 · *Aware hooks
+                  </text>
+
+                  <line
+                    x1="544"
+                    y1="54"
+                    x2="572"
+                    y2="54"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+                  <rect
+                    x="576"
+                    y="34"
+                    width="110"
+                    height="40"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="631"
+                    y="58"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    4 · before-init
+                  </text>
+
+                  <path
+                    d="M631 78 C631 96, 88 96, 88 112"
+                    fill="none"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+
+                  <rect
+                    x="12"
+                    y="116"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="88"
+                    y="134"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    5 · @PostConstruct
+                  </text>
+                  <text
+                    x="88"
+                    y="149"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    deps are ready NOW
+                  </text>
+
+                  <line
+                    x1="168"
+                    y1="136"
+                    x2="196"
+                    y2="136"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+                  <rect
+                    x="200"
+                    y="116"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="276"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    6 · after-init
+                  </text>
+
+                  <line
+                    x1="356"
+                    y1="136"
+                    x2="384"
+                    y2="136"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+                  <rect
+                    x="388"
+                    y="116"
+                    width="152"
+                    height="40"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="464"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    7 · IN USE
+                  </text>
+
+                  <line
+                    x1="544"
+                    y1="136"
+                    x2="572"
+                    y2="136"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s2)"
+                  />
+                  <rect
+                    x="576"
+                    y="116"
+                    width="110"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="631"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    8 · @PreDestroy
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="180"
+                    width="676"
+                    height="30"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="200"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Steps 4 and 6 are BeanPostProcessors — where the proxy gets
+                    wrapped around your bean.
+                  </text>
+
+                  <text x="12" y="234" font-size="10.5" fill="var(--ink-soft)">
+                    Field-injected deps are still null inside the constructor.
+                    That is what @PostConstruct is for.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Step 6 is where the magic is installed.</b>
+              <code>@Transactional</code>, <code>@Cacheable</code> and
+              <code>@Async</code> don't modify your class — a post-processor
+              swaps your bean for a proxy that wraps it. Everything in the next
+              section follows from that.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ PROXIES ============ -->
+        <section id="proxies">
+          <h2>Proxies and AOP</h2>
+          <p class="lede">
+            This is the single most useful thing to understand about Spring.
+            Annotations like <code>@Transactional</code> work by
+            <strong>wrapping your bean in another object</strong> — and anything
+            that bypasses that wrapper silently does nothing.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 260"
+                role="img"
+                aria-label="An external caller goes through the proxy and gets a transaction, while an internal this-call goes straight to the target and is not intercepted"
+              >
+                <defs>
+                  <marker
+                    id="s3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--val)">
+                    EXTERNAL CALL — intercepted
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="30"
+                    width="128"
+                    height="42"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="76"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    Controller
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="146"
+                      y1="51"
+                      x2="184"
+                      y2="51"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#s3)"
+                    />
+                  </g>
+
+                  <rect
+                    x="190"
+                    y="24"
+                    width="200"
+                    height="54"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="290"
+                    y="45"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    PROXY
+                  </text>
+                  <text
+                    x="290"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    begin tx · call · commit
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="396"
+                      y1="51"
+                      x2="434"
+                      y2="51"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#s3)"
+                    />
+                  </g>
+
+                  <rect
+                    x="440"
+                    y="24"
+                    width="248"
+                    height="54"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="564"
+                    y="45"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    your OrderService
+                  </text>
+                  <text
+                    x="564"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-soft)"
+                  >
+                    save() — no tx code in it
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="100"
+                    x2="688"
+                    y2="100"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text x="12" y="126" font-size="11" fill="var(--hot)">
+                    INTERNAL CALL — this.other() skips the proxy entirely
+                  </text>
+
+                  <rect
+                    x="190"
+                    y="140"
+                    width="200"
+                    height="54"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    stroke-dasharray="7 5"
+                  />
+                  <text
+                    x="290"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink-faint)"
+                  >
+                    PROXY
+                  </text>
+                  <text
+                    x="290"
+                    y="178"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    never consulted
+                  </text>
+
+                  <rect
+                    x="440"
+                    y="140"
+                    width="248"
+                    height="54"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="564"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    save() → this.audit()
+                  </text>
+                  <text
+                    x="564"
+                    y="178"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    @Transactional ignored
+                  </text>
+
+                  <path
+                    d="M600 196 C600 216, 520 216, 500 200"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 4"
+                  />
+                  <text
+                    x="12"
+                    y="222"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    The annotation is on the method — but nothing is watching
+                    the call.
+                  </text>
+                  <text x="12" y="242" font-size="11" fill="var(--ink-soft)">
+                    No error, no warning, no transaction. It simply does
+                    nothing.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Self-invocation is the most common Spring bug there is.</b> The
+              fix is to move the annotated method onto a different bean, so the
+              call crosses a proxy boundary. Injecting the bean into itself also
+              works, and reads like an apology.
+            </figcaption>
+          </figure>
+
+          <h3>Which proxy you get</h3>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kind</th>
+                  <th>Requires</th>
+                  <th>Can't intercept</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">JDK dynamic</td>
+                  <td>An interface</td>
+                  <td>Anything not on the interface</td>
+                </tr>
+                <tr>
+                  <td class="name">CGLIB</td>
+                  <td>A non-final class with a usable constructor</td>
+                  <td class="mono">final, static, private methods</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Spring Boot defaults to CGLIB (<code>proxyTargetClass=true</code>),
+            so you usually get a generated subclass. That's why a
+            <code>final</code> method or a <code>private</code> method can never
+            be advised — the subclass has no way to override it.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Your own aspect — the same mechanism the built-ins use.</span>
+<span class="k">@Aspect</span> <span class="k">@Component</span>
+<span class="k">class</span> <span class="t">TimingAspect</span> {
+
+    <span class="k">@Around</span>(<span class="s">"@annotation(Timed)"</span>)
+    <span class="t">Object</span> time(<span class="t">ProceedingJoinPoint</span> pjp) <span class="k">throws</span> <span class="t">Throwable</span> {
+        <span class="k">long</span> t0 = <span class="t">System</span>.nanoTime();
+        <span class="k">try</span> { <span class="k">return</span> pjp.proceed(); }
+        <span class="k">finally</span> { log.info(<span class="s">"{} took {}ns"</span>, pjp.getSignature(), <span class="t">System</span>.nanoTime()-t0); }
+    }
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ TX ============ -->
+        <section id="tx">
+          <h2>@Transactional</h2>
+          <p class="lede">
+            A proxy that opens a transaction before your method and commits
+            after — or rolls back. Its defaults surprise people, and two of them
+            cause real data loss.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Mechanism</dt>
+              <dd>Proxy, not bytecode</dd>
+            </div>
+            <div>
+              <dt>Default propagation</dt>
+              <dd>REQUIRED</dd>
+            </div>
+            <div>
+              <dt>Rolls back on</dt>
+              <dd>RuntimeException, Error</dd>
+            </div>
+            <div>
+              <dt>Checked exceptions</dt>
+              <dd class="no">Commits anyway</dd>
+            </div>
+            <div>
+              <dt>Non-public methods</dt>
+              <dd class="no">Ignored</dd>
+            </div>
+            <div>
+              <dt>Self-invocation</dt>
+              <dd class="no">Ignored</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="c">// ✗ Checked exception → Spring COMMITS. This is the default.</span>
+<span class="k">@Transactional</span>
+<span class="k">void</span> transfer() <span class="k">throws</span> <span class="t">InsufficientFunds</span> {   <span class="c">// a checked exception</span>
+    debit(); <span class="k">throw new</span> <span class="t">InsufficientFunds</span>();     <span class="c">// the debit is kept!</span>
+}
+
+<span class="c">// ✓ Say what you mean</span>
+<span class="k">@Transactional</span>(rollbackFor = <span class="t">Exception</span>.<span class="k">class</span>)
+
+<span class="c">// ✗ Not public → the proxy cannot advise it → silently no transaction</span>
+<span class="k">@Transactional private void</span> save() { … }
+
+<span class="c">// Read-only is a real optimisation, not a hint</span>
+<span class="k">@Transactional</span>(readOnly = <span class="k">true</span>)   <span class="c">// skips dirty-checking; flags the JDBC connection</span></pre>
+          </div>
+
+          <h3>Propagation — what happens when a transaction already exists</h3>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Propagation</th>
+                  <th>Existing transaction</th>
+                  <th>None</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">REQUIRED</td>
+                  <td>Join it <b>(default)</b></td>
+                  <td>Start one</td>
+                </tr>
+                <tr>
+                  <td class="name">REQUIRES_NEW</td>
+                  <td>Suspend it, start a fresh one</td>
+                  <td>Start one</td>
+                </tr>
+                <tr>
+                  <td class="name">MANDATORY</td>
+                  <td>Join it</td>
+                  <td class="n">Throw</td>
+                </tr>
+                <tr>
+                  <td class="name">SUPPORTS</td>
+                  <td>Join it</td>
+                  <td>Run without one</td>
+                </tr>
+                <tr>
+                  <td class="name">NEVER</td>
+                  <td class="n">Throw</td>
+                  <td>Run without one</td>
+                </tr>
+                <tr>
+                  <td class="name">NESTED</td>
+                  <td>Savepoint inside it</td>
+                  <td>Start one</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >REQUIRED means one rollback poisons everything</span
+            >
+            <p>
+              Because the inner call <em>joins</em> the outer transaction, an
+              exception inside it marks the whole thing rollback-only — even if
+              you catch the exception in the caller. The commit then fails with
+              <code>UnexpectedRollbackException</code>, which looks like it came
+              from nowhere. If a sub-operation must be able to fail
+              independently (an audit log, say), it needs
+              <code>REQUIRES_NEW</code> <em>and</em> its own bean so the call
+              crosses a proxy.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ BOOT ============ -->
+        <section id="boot">
+          <h2>Spring Boot</h2>
+          <p class="lede">
+            Boot is not a different framework. It's Spring plus opinionated
+            defaults — auto-configuration, starter dependencies, and an embedded
+            server.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">@SpringBootApplication</span>   <span class="c">// = @Configuration + @EnableAutoConfiguration + @ComponentScan</span>
+<span class="k">public class</span> <span class="t">App</span> {
+    <span class="k">public static void</span> main(<span class="t">String</span>[] args) { <span class="t">SpringApplication</span>.run(<span class="t">App</span>.<span class="k">class</span>, args); }
+}</pre>
+          </div>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 210"
+                role="img"
+                aria-label="Auto-configuration checks whether a class is on the classpath and whether you already defined the bean, and backs off if you did"
+              >
+                <defs>
+                  <marker
+                    id="s4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <rect
+                    x="12"
+                    y="46"
+                    width="168"
+                    height="48"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="96"
+                    y="68"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    is H2 on the
+                  </text>
+                  <text
+                    x="96"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    classpath?
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="184"
+                      y1="70"
+                      x2="222"
+                      y2="70"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#s4)"
+                    />
+                  </g>
+
+                  <rect
+                    x="228"
+                    y="46"
+                    width="196"
+                    height="48"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="326"
+                    y="68"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    did YOU define a
+                  </text>
+                  <text
+                    x="326"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    DataSource bean?
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="428"
+                      y1="60"
+                      x2="466"
+                      y2="46"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#s4)"
+                    />
+                  </g>
+                  <rect
+                    x="472"
+                    y="20"
+                    width="212"
+                    height="44"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="578"
+                    y="38"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    no → Boot creates one
+                  </text>
+                  <text
+                    x="578"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    @ConditionalOnMissingBean
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="428"
+                      y1="82"
+                      x2="466"
+                      y2="100"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#s4)"
+                    />
+                  </g>
+                  <rect
+                    x="472"
+                    y="80"
+                    width="212"
+                    height="44"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="578"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    yes → Boot backs off
+                  </text>
+                  <text
+                    x="578"
+                    y="114"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--key)"
+                  >
+                    yours always wins
+                  </text>
+
+                  <text x="12" y="152" font-size="11" fill="var(--ink-soft)">
+                    Every auto-configuration is guarded this way. Nothing is
+                    forced on you —
+                  </text>
+                  <text x="12" y="170" font-size="11" fill="var(--ink-soft)">
+                    defining the bean yourself is the documented way to
+                    override.
+                  </text>
+                  <text
+                    x="12"
+                    y="194"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Run with --debug to print exactly what matched and what
+                    didn't.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Auto-configuration is conditional, not magic.</b> When
+              something unexpected appears in your context, the
+              auto-configuration report tells you which condition fired — it's
+              the fastest way out of "where did this bean come from?".
+            </figcaption>
+          </figure>
+
+          <h3>Configuration and profiles</h3>
+          <div class="code">
+            <pre><span class="c"># application.yml — later sources override earlier ones</span>
+spring.datasource.url: jdbc:postgresql://localhost/app
+
+<span class="c"># Precedence, roughly: command line &gt; env vars &gt; profile-specific file</span>
+<span class="c">#                     &gt; application.yml &gt; defaults in code</span>
+
+<span class="c">// Typed, validated config beats scattered @Value</span>
+<span class="k">@ConfigurationProperties</span>(prefix = <span class="s">"billing"</span>)
+<span class="k">record</span> <span class="t">BillingProps</span>(<span class="t">String</span> apiKey, <span class="t">Duration</span> timeout) { }
+
+<span class="c">// @Value is fine for one-offs, awkward for groups</span>
+<span class="k">@Value</span>(<span class="s">"${billing.timeout:30s}"</span>) <span class="t">Duration</span> timeout;</pre>
+          </div>
+        </section>
+
+        <!-- ============ MVC ============ -->
+        <section id="mvc">
+          <h2>Spring MVC</h2>
+          <p class="lede">
+            One servlet receives every request and routes it. Knowing the path
+            through it makes stack traces legible.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 200"
+                role="img"
+                aria-label="A request passing through filters, the dispatcher servlet, handler mapping, the controller, and a message converter on the way back"
+              >
+                <defs>
+                  <marker
+                    id="s5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="52"
+                    width="92"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="58"
+                    y="78"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    request
+                  </text>
+                  <line
+                    x1="108"
+                    y1="73"
+                    x2="132"
+                    y2="73"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s5)"
+                  />
+
+                  <rect
+                    x="136"
+                    y="52"
+                    width="92"
+                    height="42"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="182"
+                    y="78"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Filters
+                  </text>
+                  <line
+                    x1="232"
+                    y1="73"
+                    x2="256"
+                    y2="73"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s5)"
+                  />
+
+                  <rect
+                    x="260"
+                    y="46"
+                    width="148"
+                    height="54"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="334"
+                    y="68"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    DispatcherServlet
+                  </text>
+                  <text
+                    x="334"
+                    y="85"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    the front controller
+                  </text>
+                  <line
+                    x1="412"
+                    y1="73"
+                    x2="436"
+                    y2="73"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s5)"
+                  />
+
+                  <rect
+                    x="440"
+                    y="52"
+                    width="112"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="496"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink)"
+                  >
+                    HandlerMapping
+                  </text>
+                  <text
+                    x="496"
+                    y="86"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    which method?
+                  </text>
+                  <line
+                    x1="556"
+                    y1="73"
+                    x2="580"
+                    y2="73"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s5)"
+                  />
+
+                  <rect
+                    x="584"
+                    y="52"
+                    width="100"
+                    height="42"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="634"
+                    y="78"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    @Controller
+                  </text>
+
+                  <path
+                    d="M634 100 C634 128, 200 128, 182 108"
+                    fill="none"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#s5)"
+                  />
+                  <rect
+                    x="240"
+                    y="128"
+                    width="200"
+                    height="38"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="340"
+                    y="152"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    HttpMessageConverter
+                  </text>
+                  <text
+                    x="456"
+                    y="152"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    object → JSON
+                  </text>
+
+                  <text x="12" y="190" font-size="10.5" fill="var(--ink-soft)">
+                    Filters are servlet-level and see everything; interceptors
+                    and @ControllerAdvice sit inside the dispatcher.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Where to put cross-cutting logic:</b> a <code>Filter</code> for
+              anything that must wrap the raw request (security, correlation
+              ids), <code>@ControllerAdvice</code> for exception handling and
+              shared model attributes.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="k">@RestController</span>                     <span class="c">// = @Controller + @ResponseBody</span>
+<span class="k">@RequestMapping</span>(<span class="s">"/orders"</span>)
+<span class="k">class</span> <span class="t">OrderController</span> {
+
+    <span class="k">@GetMapping</span>(<span class="s">"/{id}"</span>)
+    <span class="t">OrderDto</span> get(<span class="k">@PathVariable</span> <span class="k">long</span> id) { … }
+
+    <span class="k">@PostMapping</span>
+    <span class="k">@ResponseStatus</span>(<span class="t">HttpStatus</span>.CREATED)
+    <span class="t">OrderDto</span> create(<span class="k">@Valid @RequestBody</span> <span class="t">CreateOrder</span> body) { … }
+}
+
+<span class="c">// One place for error mapping across every controller</span>
+<span class="k">@RestControllerAdvice</span>
+<span class="k">class</span> <span class="t">Errors</span> {
+    <span class="k">@ExceptionHandler</span>(<span class="t">NotFound</span>.<span class="k">class</span>)
+    <span class="k">@ResponseStatus</span>(<span class="t">HttpStatus</span>.NOT_FOUND)
+    <span class="t">Problem</span> notFound(<span class="t">NotFound</span> e) { <span class="k">return new</span> <span class="t">Problem</span>(e.getMessage()); }
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ DATA ============ -->
+        <section id="data">
+          <h2>Data access</h2>
+          <p class="lede">
+            Spring Data writes your repository implementations from method
+            names. Convenient, and it hides two performance traps worth knowing
+            by name.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">interface</span> <span class="t">OrderRepository</span> <span class="k">extends</span> <span class="t">JpaRepository</span>&lt;<span class="t">Order</span>, <span class="t">Long</span>&gt; {
+
+    <span class="c">// Parsed from the name — no implementation needed</span>
+    <span class="t">List</span>&lt;<span class="t">Order</span>&gt; findByCustomerIdAndStatus(<span class="k">long</span> id, <span class="t">Status</span> s);
+
+    <span class="c">// When the name would get silly, write the query</span>
+    <span class="k">@Query</span>(<span class="s">"select o from Order o join fetch o.items where o.id = :id"</span>)
+    <span class="t">Optional</span>&lt;<span class="t">Order</span>&gt; findWithItems(<span class="k">@Param</span>(<span class="s">"id"</span>) <span class="k">long</span> id);
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Two traps that only appear under real data</span>
+            <p>
+              <strong>N+1 queries.</strong> Loading 100 orders and touching
+              <code>order.getItems()</code> on each fires 101 queries. Fix with
+              <code>join fetch</code> or an entity graph — and turn on SQL
+              logging in development so you can see it happen.
+            </p>
+            <p>
+              <strong>LazyInitializationException.</strong> Touching a lazy
+              association after the session closed. Boot's
+              <code>spring.jpa.open-in-view</code> defaults to
+              <code>true</code>, which hides this by holding the connection for
+              the whole request — convenient in development, a connection-pool
+              problem in production. Turn it off and fetch what you need
+              explicitly.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ TESTING ============ -->
+        <section id="testing">
+          <h2>Testing</h2>
+          <p class="lede">
+            The main decision is how much of the container to start. Most tests
+            need none of it.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Approach</th>
+                  <th>Starts</th>
+                  <th>Use for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Plain JUnit</td>
+                  <td>Nothing</td>
+                  <td>
+                    <b>Most tests.</b> Constructor injection makes this trivial
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">@WebMvcTest</td>
+                  <td>Web layer only</td>
+                  <td>Controllers, JSON, validation</td>
+                </tr>
+                <tr>
+                  <td class="name">@DataJpaTest</td>
+                  <td>JPA + a test database</td>
+                  <td>Repositories and queries</td>
+                </tr>
+                <tr>
+                  <td class="name">@SpringBootTest</td>
+                  <td>The whole context</td>
+                  <td>A few end-to-end paths — it's slow</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// No Spring at all — fast, and it proves the class is well-designed</span>
+<span class="k">@Test</span> <span class="k">void</span> appliesDiscount() {
+    <span class="k">var</span> svc = <span class="k">new</span> <span class="t">OrderService</span>(<span class="k">new</span> <span class="t">InMemoryRepo</span>(), <span class="t">Clock</span>.fixed(…));
+    assertThat(svc.total(order)).isEqualTo(<span class="s">"90.00"</span>);
+}
+
+<span class="c">// A slice — only the web layer, with the service replaced</span>
+<span class="k">@WebMvcTest</span>(<span class="t">OrderController</span>.<span class="k">class</span>)
+<span class="k">class</span> <span class="t">OrderControllerTest</span> {
+    <span class="k">@Autowired</span> <span class="t">MockMvc</span> mvc;
+    <span class="k">@MockitoBean</span> <span class="t">OrderService</span> service;    <span class="c">// @MockBean in older Boot</span>
+}
+
+<span class="c">// A real database in Docker, rather than H2 pretending to be Postgres</span>
+<span class="k">@Testcontainers</span> <span class="k">@SpringBootTest</span></pre>
+          </div>
+
+          <p>
+            Context caching matters more than it looks: Spring reuses a context
+            across test classes with identical configuration, so every distinct
+            combination of <code>@MockitoBean</code> and properties creates
+            another full startup. Keeping test configurations uniform is often
+            the single biggest win in suite runtime.
+          </p>
+        </section>
+
+        <!-- ============ VERSIONS ============ -->
+        <section id="versions">
+          <h2>Spring 6 and Boot 3</h2>
+          <p class="lede">
+            The 2022 jump was the largest breaking change in Spring's history,
+            and it's the one you'll meet in any migration.
+          </p>
+
+          <ul>
+            <li>
+              <strong>Java 17 is the floor.</strong> Spring 6 and Boot 3 will
+              not run on 8 or 11.
+            </li>
+            <li>
+              <strong
+                ><code>javax.*</code> became <code>jakarta.*</code>.</strong
+              >
+              Every import of <code>javax.persistence</code>,
+              <code>javax.servlet</code> or <code>javax.validation</code> has to
+              change — this is the bulk of the migration work, and it's
+              mechanical.
+            </li>
+            <li>
+              <strong>AOT and native images.</strong> Boot 3 can pre-compute the
+              context at build time for GraalVM, trading dynamic flexibility for
+              near-instant startup.
+            </li>
+            <li>
+              <strong>Observability built in.</strong> Micrometer tracing
+              replaces Sleuth.
+            </li>
+            <li>
+              <strong><code>RestClient</code></strong> arrived in Spring 6.1 as
+              the modern synchronous HTTP client — <code>RestTemplate</code> is
+              in maintenance.
+            </li>
+          </ul>
+
+          <div class="note">
+            <span class="tag"
+              >Check versions rather than trusting any guide</span
+            >
+            <p>
+              Spring's release cadence is fast and defaults do shift between
+              minor versions — <code>@MockBean</code> giving way to
+              <code>@MockitoBean</code>, circular references flipping to
+              rejected-by-default. Pin the documentation to <em>your</em> Boot
+              version; answers written for 2.x are often wrong for 3.x in small,
+              expensive ways.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Calling an annotated method on <code>this</code></h3>
+          <p>
+            The number one Spring bug. <code>@Transactional</code>,
+            <code>@Cacheable</code>, <code>@Async</code>,
+            <code>@Retryable</code> — all of them are proxy-based, and an
+            internal call never reaches the proxy. There is no warning; the
+            annotation simply has no effect. Move the method to another bean.
+          </p>
+
+          <h3>Expecting a checked exception to roll back</h3>
+          <p>
+            It won't. Spring rolls back on <code>RuntimeException</code> and
+            <code>Error</code> only. If your domain uses checked exceptions,
+            every <code>@Transactional</code> needs <code>rollbackFor</code>, or
+            you will commit half-finished work.
+          </p>
+
+          <h3>Mutable state on a singleton bean</h3>
+          <p>
+            One instance, every thread. A field that looks like per-call scratch
+            space is shared across concurrent requests. Beans should be
+            stateless; if a bean genuinely needs state, it needs the same
+            treatment as any other shared object.
+          </p>
+
+          <h3>Field injection</h3>
+          <div class="code">
+            <pre><span class="c">// Compiles. Runs. Can't be constructed in a test, can't be final,</span>
+<span class="c">// and lets a class quietly accumulate twelve dependencies</span>
+<span class="c">// without anyone noticing the constructor getting longer.</span>
+<span class="k">@Autowired private</span> <span class="t">Repo</span> repo;</pre>
+          </div>
+
+          <h3><code>@SpringBootTest</code> for everything</h3>
+          <p>
+            Starting the full context for a test that exercises one method makes
+            suites take minutes instead of seconds. Reach for plain JUnit first,
+            a slice second, and the full context only for genuine end-to-end
+            coverage.
+          </p>
+
+          <h3>Component scanning from the wrong place</h3>
+          <p>
+            Scanning begins at the main class's package. Put
+            <code>@SpringBootApplication</code> somewhere deep and beans in
+            sibling packages are invisible — producing a
+            <code>NoSuchBeanDefinitionException</code> that looks like a wiring
+            problem but is really a layout one.
+          </p>
+
+          <h3>Trusting auto-configuration you haven't inspected</h3>
+          <p>
+            When a bean you never declared turns up, or one you expected
+            doesn't, run with <code>--debug</code>. The condition evaluation
+            report says exactly which auto-configuration matched and why — it
+            turns guesswork into reading.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              A container builds your objects, and a proxy wraps them. Take
+              dependencies through the constructor, keep beans stateless,
+              remember that annotations only work when the call crosses the
+              proxy, and check the condition report when Spring does something
+              you didn't ask for.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

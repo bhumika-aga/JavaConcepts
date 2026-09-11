@@ -1,0 +1,4099 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Java Threads</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <a href="#p1"><span>01 What a thread is</span></a>
+          <a href="#p2"><span>02 Making threads run</span></a>
+          <a href="#p3"><span>03 Why it's hard</span></a>
+          <a href="#p4"><span>04 The memory model</span></a>
+          <a href="#p5"><span>05 Locks</span></a>
+          <a href="#p6"><span>06 The toolkit</span></a>
+          <a href="#p7"><span>07 Executors</span></a>
+          <a href="#p8"><span>08 CompletableFuture</span></a>
+          <a href="#p9"><span>09 Virtual threads</span></a>
+          <a href="#p10"><span>10 Patterns that work</span></a>
+          <a href="#p11"><span>11 Ways to get hurt</span></a>
+          <a href="#p12"><span>12 A learning path</span></a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            java concurrency &middot; from first principles to Loom
+          </p>
+          <h1>Inside Java Threads</h1>
+          <p class="dek">
+            Single-threaded code runs in the order you wrote it. Concurrent code
+            runs in <em>an</em> order — and only the orderings you explicitly
+            constrain are guaranteed. Everything below follows from that one
+            sentence.
+          </p>
+        </header>
+
+        <!-- ============ 01 ============ -->
+        <section id="p1">
+          <span class="eyebrow">Part 01</span>
+          <h2>What a thread actually is</h2>
+          <p class="lede">
+            A thread is an independent path of execution through your program.
+            Your process can have many, and they all share one thing that makes
+            everything else complicated.
+          </p>
+
+          <p>
+            When the JVM starts, it creates one thread to run <code>main</code>.
+            Every thread you create after that gets
+            <strong>its own call stack</strong> — its own local variables, its
+            own method-call chain, its own program counter. But every thread
+            shares <strong>one heap</strong>. Every object you ever allocate
+            lives there, visible to all of them.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 290"
+                role="img"
+                aria-label="Three threads each with a private stack, all reading and writing one shared heap"
+              >
+                <defs>
+                  <marker
+                    id="a1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="IBM Plex Mono, monospace" font-size="12">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    PRIVATE — one per thread, nobody else can reach it
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="112"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    Thread 1 stack
+                  </text>
+                  <text
+                    x="112"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="112"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    int i = 0
+                  </text>
+
+                  <rect
+                    x="252"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    Thread 2 stack
+                  </text>
+                  <text
+                    x="350"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="350"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    int i = 7
+                  </text>
+
+                  <rect
+                    x="490"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="588"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--key)"
+                  >
+                    Thread 3 stack
+                  </text>
+                  <text
+                    x="588"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="588"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    int i = 2
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="112"
+                      y1="124"
+                      x2="112"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                    <line
+                      x1="350"
+                      y1="124"
+                      x2="350"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                    <line
+                      x1="588"
+                      y1="124"
+                      x2="588"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                  </g>
+                  <text
+                    x="124"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    read / write
+                  </text>
+                  <text
+                    x="362"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    read / write
+                  </text>
+                  <text
+                    x="600"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    read / write
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="180"
+                    width="672"
+                    height="86"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    THE SHARED HEAP — every object, one copy, all threads
+                  </text>
+                  <rect
+                    x="150"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="210"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    counter = 41
+                  </text>
+                  <rect
+                    x="290"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="350"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    List items
+                  </text>
+                  <rect
+                    x="430"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="490"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    cache map
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Private stacks, one shared heap.</b> Local variables are
+              automatically thread-safe — nobody else can see them. Everything
+              reachable from the heap is fair game for every thread
+              simultaneously, and that is the entire source of difficulty.
+            </figcaption>
+          </figure>
+
+          <p>
+            So the first rule of thread safety falls out for free:
+            <strong
+              >a local variable of a primitive type can never be involved in a
+              race.</strong
+            >
+            Problems begin the moment two threads can reach the same object.
+          </p>
+
+          <h3>Why bother with threads at all</h3>
+          <ul>
+            <li>
+              <strong>Use more than one core.</strong> A single-threaded program
+              on a 16-core machine uses one core. Genuinely CPU-bound work
+              parallelises.
+            </li>
+            <li>
+              <strong>Stop wasting time on waiting.</strong> Far more common. A
+              thread blocked on a database call or an HTTP response is doing
+              nothing; another thread can work meanwhile. Most server workloads
+              are this, not the first case.
+            </li>
+            <li>
+              <strong>Keep something responsive.</strong> UI toolkits and
+              servers need a thread that never blocks so the application keeps
+              answering.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ 02 ============ -->
+        <section id="p2">
+          <span class="eyebrow">Part 02</span>
+          <h2>Making threads run</h2>
+          <p class="lede">
+            Three ways to start work, and a lifecycle you need to recognise in a
+            stack dump.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// 1. A raw Thread with a lambda (Runnable is a functional interface).</span>
+<span class="t">Thread</span> t = <span class="k">new</span> <span class="t">Thread</span>(() -&gt; <span class="t">System</span>.out.println(<span class="s">"running"</span>));
+t.start();       <span class="c">// starts a NEW thread</span>
+t.run();         <span class="c">// ✗ just a normal method call on the CURRENT thread</span>
+t.join();        <span class="c">// block until t finishes</span>
+
+<span class="c">// 2. Subclassing Thread — legal, rarely right. You're inheriting</span>
+<span class="c">//    when you only wanted to pass behaviour.</span>
+<span class="k">class</span> <span class="t">Worker</span> <span class="k">extends</span> <span class="t">Thread</span> {
+    <span class="k">@Override public void</span> run() { <span class="c">/* … */</span> }
+}
+
+<span class="c">// 3. What you'll actually use in real code — hand work to a pool.</span>
+<span class="k">try</span> (<span class="t">ExecutorService</span> pool = <span class="t">Executors</span>.newFixedThreadPool(<span class="n">4</span>)) {
+    pool.submit(() -&gt; doWork());
+}   <span class="c">// close() shuts down and waits — Java 19+</span></pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">The classic beginner trap</span>
+            <p>
+              <code>t.run()</code> compiles, runs your code, and creates no
+              thread whatsoever. It executes synchronously on the caller. Only
+              <code>t.start()</code> asks the JVM for a new thread — and calling
+              <code>start()</code> twice on the same object throws
+              <code>IllegalThreadStateException</code>. A <code>Thread</code> is
+              single-use.
+            </p>
+          </div>
+
+          <h3>The lifecycle</h3>
+          <p>
+            Every thread is in exactly one of six states, and
+            <code>Thread.getState()</code> will tell you which. Reading these
+            correctly is most of what diagnosing a hung application involves.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 300"
+                role="img"
+                aria-label="Thread state machine showing transitions between new, runnable, blocked, waiting, timed waiting and terminated"
+              >
+                <defs>
+                  <marker
+                    id="a2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g
+                  font-family="IBM Plex Mono, monospace"
+                  font-size="11.5"
+                  color="var(--ink-soft)"
+                >
+                  <!-- NEW -->
+                  <rect
+                    x="16"
+                    y="126"
+                    width="104"
+                    height="44"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="68"
+                    y="153"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    NEW
+                  </text>
+
+                  <line
+                    x1="122"
+                    y1="148"
+                    x2="176"
+                    y2="148"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a2)"
+                  />
+                  <text
+                    x="149"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    start()
+                  </text>
+
+                  <!-- RUNNABLE -->
+                  <rect
+                    x="180"
+                    y="120"
+                    width="130"
+                    height="56"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="245"
+                    y="144"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    RUNNABLE
+                  </text>
+                  <text
+                    x="245"
+                    y="162"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-soft)"
+                  >
+                    running or ready
+                  </text>
+
+                  <!-- BLOCKED -->
+                  <rect
+                    x="384"
+                    y="20"
+                    width="150"
+                    height="44"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="459"
+                    y="47"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    BLOCKED
+                  </text>
+                  <path
+                    d="M300 124 C340 84, 360 48, 380 44"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a2)"
+                  />
+                  <text x="316" y="76" font-size="10" fill="var(--ink-faint)">
+                    waiting for a monitor
+                  </text>
+
+                  <!-- WAITING -->
+                  <rect
+                    x="384"
+                    y="96"
+                    width="150"
+                    height="44"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="459"
+                    y="123"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--key)"
+                  >
+                    WAITING
+                  </text>
+                  <line
+                    x1="314"
+                    y1="134"
+                    x2="380"
+                    y2="122"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a2)"
+                  />
+                  <text x="318" y="108" font-size="10" fill="var(--ink-faint)">
+                    wait(), join()
+                  </text>
+
+                  <!-- TIMED -->
+                  <rect
+                    x="384"
+                    y="172"
+                    width="150"
+                    height="44"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="459"
+                    y="199"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--key)"
+                  >
+                    TIMED_WAITING
+                  </text>
+                  <line
+                    x1="314"
+                    y1="162"
+                    x2="380"
+                    y2="190"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a2)"
+                  />
+                  <text x="318" y="186" font-size="10" fill="var(--ink-faint)">
+                    sleep(n), wait(n)
+                  </text>
+
+                  <!-- back arrows -->
+                  <path
+                    d="M384 56 C344 96, 330 110, 312 116"
+                    fill="none"
+                    stroke="var(--good)"
+                    stroke-width="1.8"
+                    stroke-dasharray="5 4"
+                    marker-end="url(#a2)"
+                    color="var(--good)"
+                  />
+                  <path
+                    d="M384 210 C340 214, 320 196, 306 180"
+                    fill="none"
+                    stroke="var(--good)"
+                    stroke-width="1.8"
+                    stroke-dasharray="5 4"
+                    marker-end="url(#a2)"
+                    color="var(--good)"
+                  />
+                  <text x="560" y="124" font-size="10" fill="var(--good)">
+                    notify / timeout /
+                  </text>
+                  <text x="560" y="138" font-size="10" fill="var(--good)">
+                    lock acquired
+                  </text>
+
+                  <!-- TERMINATED -->
+                  <rect
+                    x="180"
+                    y="238"
+                    width="130"
+                    height="44"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="245"
+                    y="265"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    TERMINATED
+                  </text>
+                  <line
+                    x1="245"
+                    y1="180"
+                    x2="245"
+                    y2="234"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a2)"
+                  />
+                  <text x="255" y="210" font-size="10" fill="var(--ink-faint)">
+                    run() returns or throws
+                  </text>
+
+                  <text x="16" y="290" font-size="10.5" fill="var(--ink-faint)">
+                    BLOCKED = waiting for a monitor. WAITING = parked until
+                    signalled. The state tells you which.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Six states, and only one of them is running.</b>
+              <code>RUNNABLE</code> covers both "executing right now" and
+              "ready, waiting for a core" — the JVM can't distinguish them, so a
+              thread dump can't either.
+            </figcaption>
+          </figure>
+
+          <h3>Interruption: the cooperative stop signal</h3>
+          <p>
+            There is no safe way to kill a thread.
+            <code>Thread.stop()</code> exists, is deprecated for removal, and
+            corrupts state by releasing locks mid-update. The supported
+            mechanism is a <em>request</em> the target must honour.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">Thread</span> worker = <span class="k">new</span> <span class="t">Thread</span>(() -&gt; {
+    <span class="k">while</span> (!<span class="t">Thread</span>.currentThread().isInterrupted()) {
+        <span class="k">try</span> {
+            doChunkOfWork();
+            <span class="t">Thread</span>.sleep(<span class="n">100</span>);
+        } <span class="k">catch</span> (<span class="t">InterruptedException</span> e) {
+            <span class="c">// sleep/wait/join CLEAR the flag when they throw,</span>
+            <span class="c">// so restore it and leave.</span>
+            <span class="t">Thread</span>.currentThread().interrupt();
+            <span class="k">break</span>;
+        }
+    }
+});
+worker.start();
+worker.interrupt();   <span class="c">// polite request, not a kill</span></pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Never do this</span>
+            <p>
+              <code>catch (InterruptedException e) { }</code> — swallowing it
+              silently discards the only cancellation signal your thread will
+              get, and clears the flag so nothing downstream can detect it
+              either. Either rethrow it, or re-set the flag with
+              <code>Thread.currentThread().interrupt()</code>. An empty catch
+              block here is a bug every single time.
+            </p>
+          </div>
+
+          <p>
+            Two other properties worth knowing early: a
+            <strong>daemon</strong> thread (<code>t.setDaemon(true)</code>) does
+            not keep the JVM alive — when only daemons remain, the JVM exits and
+            kills them abruptly. And an uncaught exception in a thread kills
+            only that thread, silently, unless you install an
+            <code>UncaughtExceptionHandler</code>.
+          </p>
+        </section>
+
+        <!-- ============ 03 ============ -->
+        <section id="p3">
+          <span class="eyebrow">Part 03</span>
+          <h2>Why concurrency is hard</h2>
+          <p class="lede">
+            Not one problem — three independent ones. Solving atomicity does
+            nothing for visibility, and neither addresses ordering.
+          </p>
+
+          <div class="trio">
+            <div>
+              <h5>Atomicity</h5>
+              <p>
+                An operation you think is one step is really several, and
+                another thread can slip in between them.
+              </p>
+            </div>
+            <div>
+              <h5>Visibility</h5>
+              <p>
+                A write by one thread may never become visible to another. Not
+                "late" — potentially never.
+              </p>
+            </div>
+            <div>
+              <h5>Ordering</h5>
+              <p>
+                The compiler and CPU reorder your instructions. Another thread
+                can observe the results out of order.
+              </p>
+            </div>
+          </div>
+
+          <h3>Atomicity: the counter that loses count</h3>
+          <p>
+            <code>count++</code> looks indivisible. It compiles to three
+            separate operations: read the field, add one, write it back. Two
+            threads interleaving those steps can both read the same starting
+            value.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 268"
+                role="img"
+                aria-label="Two thread timelines interleaving a read-modify-write on a counter, producing 1 instead of 2"
+              >
+                <g font-family="IBM Plex Mono, monospace" font-size="11.5">
+                  <text x="12" y="16" font-size="10.5" fill="var(--ink-faint)">
+                    time →
+                  </text>
+                  <line
+                    x1="12"
+                    y1="24"
+                    x2="688"
+                    y2="24"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <!-- lane 1 -->
+                  <text
+                    x="12"
+                    y="62"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    Thread 1
+                  </text>
+                  <line
+                    x1="92"
+                    y1="58"
+                    x2="688"
+                    y2="58"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="100"
+                    y="42"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="156"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    read → 0
+                  </text>
+                  <rect
+                    x="360"
+                    y="42"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="416"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    add → 1
+                  </text>
+                  <rect
+                    x="500"
+                    y="42"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="560"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    write 1
+                  </text>
+
+                  <!-- lane 2 -->
+                  <text
+                    x="12"
+                    y="126"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    Thread 2
+                  </text>
+                  <line
+                    x1="92"
+                    y1="122"
+                    x2="688"
+                    y2="122"
+                    stroke="var(--tree)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="230"
+                    y="106"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="286"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    read → 0
+                  </text>
+                  <rect
+                    x="360"
+                    y="106"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="416"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    add → 1
+                  </text>
+                  <rect
+                    x="628"
+                    y="106"
+                    width="60"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="658"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    write 1
+                  </text>
+
+                  <!-- the shared value -->
+                  <text
+                    x="12"
+                    y="190"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    count
+                  </text>
+                  <line
+                    x1="92"
+                    y1="186"
+                    x2="688"
+                    y2="186"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="120"
+                    y="190"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)"
+                  >
+                    0
+                  </text>
+                  <text
+                    x="300"
+                    y="190"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)"
+                  >
+                    0
+                  </text>
+                  <text
+                    x="560"
+                    y="176"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)"
+                  >
+                    1
+                  </text>
+                  <text
+                    x="658"
+                    y="176"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    1
+                  </text>
+
+                  <rect
+                    x="500"
+                    y="206"
+                    width="188"
+                    height="46"
+                    rx="6"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="594"
+                    y="224"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    expected 2, got 1
+                  </text>
+                  <text
+                    x="594"
+                    y="242"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    one increment vanished
+                  </text>
+
+                  <text x="12" y="252" font-size="10.5" fill="var(--ink-faint)">
+                    Both threads read 0 before either wrote. The second write
+                    overwrites the first — the lost update.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The lost update.</b> Run two threads incrementing a shared
+              <code>int</code> a million times each and you will reliably get
+              less than two million. The interleaving above is one of many that
+              lose data.
+            </figcaption>
+          </figure>
+
+          <h3>Visibility: the loop that never ends</h3>
+          <p>
+            This one shocks people. Each CPU core has its own caches, and the
+            JIT compiler is free to hoist a field read out of a loop entirely.
+            Without a memory barrier, there is <em>no guarantee</em> a write
+            ever becomes visible to another thread.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">class</span> <span class="t">Stopper</span> {
+    <span class="k">private boolean</span> stopped = <span class="k">false</span>;     <span class="c">// ✗ not volatile</span>
+
+    <span class="k">void</span> loop() {
+        <span class="k">while</span> (!stopped) { }                <span class="c">// may spin FOREVER</span>
+        <span class="t">System</span>.out.println(<span class="s">"stopped"</span>);
+    }
+    <span class="k">void</span> stop() { stopped = <span class="k">true</span>; }
+}
+
+<span class="c">// The JIT is entitled to rewrite the loop as:</span>
+<span class="c">//     if (!stopped) { while (true) { } }</span>
+<span class="c">// because within this thread, nothing changes `stopped`.</span>
+<span class="c">// That optimisation is legal, and it hangs your program.</span>
+
+<span class="c">// The fix is one keyword:</span>
+<span class="k">private volatile boolean</span> stopped = <span class="k">false</span>;</pre>
+          </div>
+
+          <h3>Ordering: writes that arrive backwards</h3>
+          <p>
+            Compilers and CPUs reorder independent instructions for speed.
+            Within one thread this is invisible — the language guarantees your
+            own code <em>appears</em> to run in order. Across threads, another
+            observer can see the effects in a different sequence than you wrote
+            them.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Thread 1                    Thread 2</span>
+config = <span class="k">new</span> <span class="t">Config</span>();          <span class="k">if</span> (ready) {
+ready   = <span class="k">true</span>;                      config.use();   <span class="c">// may see a HALF-BUILT Config</span>
+                                }
+<span class="c">// Nothing stops the write to `ready` becoming visible</span>
+<span class="c">// BEFORE the writes that populate `config`.</span></pre>
+          </div>
+
+          <h3>And the failure modes of coordination itself</h3>
+          <ul>
+            <li>
+              <strong>Deadlock</strong> — two threads each hold a lock the other
+              needs. Both wait forever. Nothing recovers.
+            </li>
+            <li>
+              <strong>Livelock</strong> — threads keep responding to each other
+              and making no progress. Busy, not stuck; equally useless.
+            </li>
+            <li>
+              <strong>Starvation</strong> — a thread never gets scheduled or
+              never wins the lock, because others keep taking priority.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ 04 ============ -->
+        <section id="p4">
+          <span class="eyebrow">Part 04</span>
+          <h2>The Java Memory Model</h2>
+          <p class="lede">
+            The specification that says which writes a thread is guaranteed to
+            see. It's built from one relation: <em>happens-before</em>.
+          </p>
+
+          <p>
+            If action A <strong>happens-before</strong> action B, then
+            everything A did is visible to B. If no happens-before relationship
+            exists between two actions in different threads, the JMM makes
+            <em>no promise at all</em> — B might see A's work, might see part of
+            it, might see none. That's not a bug in the JVM; it's the contract.
+          </p>
+
+          <h4>What creates a happens-before edge</h4>
+          <ul>
+            <li>
+              Everything a thread does before <code>t.start()</code> is visible
+              to <code>t</code>.
+            </li>
+            <li>
+              Everything <code>t</code> does is visible after
+              <code>t.join()</code> returns.
+            </li>
+            <li>
+              Releasing a monitor happens-before any later acquisition of
+              <em>that same</em> monitor.
+            </li>
+            <li>
+              A write to a <code>volatile</code> field happens-before every
+              later read of that field.
+            </li>
+            <li>
+              Anything visible to a task submitted to an executor, and anything
+              the task did, visible to whoever reads its <code>Future</code>.
+            </li>
+            <li>
+              <code>final</code> fields are safely visible after the constructor
+              completes — provided <code>this</code> didn't escape during
+              construction.
+            </li>
+          </ul>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 236"
+                role="img"
+                aria-label="A volatile write acting as a barrier that publishes all preceding writes to a second thread"
+              >
+                <defs>
+                  <marker
+                    id="a3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="IBM Plex Mono, monospace" font-size="11.5">
+                  <text x="12" y="16" font-size="10.5" fill="var(--ink-faint)">
+                    time →
+                  </text>
+
+                  <text
+                    x="12"
+                    y="58"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    Thread 1
+                  </text>
+                  <line
+                    x1="92"
+                    y1="54"
+                    x2="688"
+                    y2="54"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="100"
+                    y="38"
+                    width="106"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="153"
+                    y="59"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink)"
+                  >
+                    name = "x"
+                  </text>
+                  <rect
+                    x="214"
+                    y="38"
+                    width="106"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="267"
+                    y="59"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink)"
+                  >
+                    age = 30
+                  </text>
+                  <rect
+                    x="330"
+                    y="34"
+                    width="146"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="403"
+                    y="50"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    volatile write
+                  </text>
+                  <text
+                    x="403"
+                    y="65"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--good)"
+                  >
+                    ready = true
+                  </text>
+
+                  <!-- barrier -->
+                  <line
+                    x1="403"
+                    y1="80"
+                    x2="403"
+                    y2="148"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#a3)"
+                    color="var(--good)"
+                  />
+                  <text
+                    x="414"
+                    y="116"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    happens-before
+                  </text>
+
+                  <text
+                    x="12"
+                    y="176"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    Thread 2
+                  </text>
+                  <line
+                    x1="92"
+                    y1="172"
+                    x2="688"
+                    y2="172"
+                    stroke="var(--tree)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="330"
+                    y="152"
+                    width="146"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="403"
+                    y="168"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    volatile read
+                  </text>
+                  <text
+                    x="403"
+                    y="183"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--good)"
+                  >
+                    if (ready)
+                  </text>
+
+                  <rect
+                    x="490"
+                    y="152"
+                    width="196"
+                    height="40"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="588"
+                    y="168"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    sees name = "x"
+                  </text>
+                  <text
+                    x="588"
+                    y="183"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    and age = 30
+                  </text>
+
+                  <text x="12" y="220" font-size="10.5" fill="var(--ink-faint)">
+                    The volatile write publishes EVERYTHING that preceded it —
+                    not just the volatile field.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>A volatile write is a barrier, not just a field.</b> Reading a
+              volatile variable makes every write the writer performed
+              <em>before</em> it visible too. This is why the flag pattern works
+              — and why the flag must be volatile for the payload to be safe.
+            </figcaption>
+          </figure>
+
+          <h3>What volatile does and does not do</h3>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Guarantee</th>
+                  <th>volatile</th>
+                  <th>synchronized</th>
+                  <th>AtomicInteger</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Visibility of writes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Prevents reordering</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Atomic read-modify-write</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td>Mutual exclusion</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td>Can block a thread</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">volatile is not a lock</span>
+            <p>
+              <code>volatile int count; count++;</code> is still broken.
+              Volatile guarantees you read the latest value — it does nothing to
+              stop another thread reading the same latest value and racing you
+              to write. For counters use <code>AtomicInteger</code>; for
+              anything with an invariant across multiple fields, use a lock.
+              Volatile is for <em>flags and single-field publication</em>,
+              nothing more.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ 05 ============ -->
+        <section id="p5">
+          <span class="eyebrow">Part 05</span>
+          <h2>Locks and coordination</h2>
+          <p class="lede">
+            Mutual exclusion: only one thread inside the critical section at a
+            time. Java gives you a built-in version and a configurable one.
+          </p>
+
+          <h3>synchronized — the built-in monitor</h3>
+          <p>
+            Every Java object has a <strong>monitor</strong>.
+            <code>synchronized</code> acquires it on entry and releases it on
+            exit — including when an exception unwinds, which is a real
+            advantage. It's <strong>reentrant</strong>: a thread already holding
+            a monitor can re-acquire it without deadlocking itself.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">class</span> <span class="t">Counter</span> {
+    <span class="k">private int</span> count = <span class="n">0</span>;
+
+    <span class="c">// Locks on `this` — the whole instance.</span>
+    <span class="k">synchronized void</span> increment() { count++; }
+
+    <span class="c">// Better: a private lock nobody outside can grab.</span>
+    <span class="k">private final</span> <span class="t">Object</span> lock = <span class="k">new</span> <span class="t">Object</span>();
+    <span class="k">void</span> safeIncrement() {
+        <span class="k">synchronized</span> (lock) { count++; }
+    }
+}
+<span class="c">// A static synchronized method locks on ClassName.class instead.</span></pre>
+          </div>
+
+          <p>
+            Prefer the private lock object. <code>synchronized</code> methods
+            lock on <code>this</code>, which is publicly reachable — any outside
+            code can <code>synchronized (yourObject)</code> and interfere with
+            your locking, deliberately or by accident.
+          </p>
+
+          <h3>Deadlock, and the one rule that prevents it</h3>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 216"
+                role="img"
+                aria-label="Two threads acquiring two locks in opposite order, forming a circular wait"
+              >
+                <defs>
+                  <marker
+                    id="a4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="IBM Plex Mono, monospace" font-size="11.5">
+                  <rect
+                    x="60"
+                    y="30"
+                    width="140"
+                    height="46"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="130"
+                    y="59"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    Thread 1
+                  </text>
+
+                  <rect
+                    x="500"
+                    y="30"
+                    width="140"
+                    height="46"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="570"
+                    y="59"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--tree)"
+                  >
+                    Thread 2
+                  </text>
+
+                  <rect
+                    x="60"
+                    y="146"
+                    width="140"
+                    height="46"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="130"
+                    y="175"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    Lock A
+                  </text>
+
+                  <rect
+                    x="500"
+                    y="146"
+                    width="140"
+                    height="46"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="570"
+                    y="175"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    Lock B
+                  </text>
+
+                  <!-- holds -->
+                  <line
+                    x1="130"
+                    y1="80"
+                    x2="130"
+                    y2="142"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                    marker-end="url(#a4)"
+                    color="var(--good)"
+                  />
+                  <text
+                    x="138"
+                    y="116"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    holds
+                  </text>
+
+                  <line
+                    x1="570"
+                    y1="80"
+                    x2="570"
+                    y2="142"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                    marker-end="url(#a4)"
+                    color="var(--good)"
+                  />
+                  <text
+                    x="578"
+                    y="116"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    holds
+                  </text>
+
+                  <!-- wants (crossed) -->
+                  <path
+                    d="M204 56 C330 56, 420 130, 496 158"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#a4)"
+                    color="var(--hot)"
+                  />
+                  <text
+                    x="300"
+                    y="88"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    waits for B — forever
+                  </text>
+
+                  <path
+                    d="M496 56 C370 56, 280 130, 204 158"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#a4)"
+                    color="var(--hot)"
+                  />
+                  <text
+                    x="300"
+                    y="140"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    waits for A — forever
+                  </text>
+
+                  <text x="12" y="212" font-size="10.5" fill="var(--ink-faint)">
+                    The cycle is the deadlock. Break it by making every thread
+                    take A before B — then no cycle can form.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Circular wait.</b> The JVM will not detect or break this; the
+              threads stay parked until you kill the process.
+              <b>The fix is a global lock ordering:</b> if every thread acquires
+              locks in the same defined sequence, a cycle is impossible.
+            </figcaption>
+          </figure>
+
+          <h3>wait / notify — the guarded block</h3>
+          <p>
+            Locks give exclusion. To make a thread wait
+            <em>for a condition</em>, you need <code>wait()</code> and
+            <code>notify()</code>, both of which must be called while holding
+            the monitor.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">synchronized</span> (lock) {
+    <span class="k">while</span> (!conditionIsTrue) {   <span class="c">// ALWAYS while, never if</span>
+        lock.wait();             <span class="c">// releases the lock, parks the thread</span>
+    }
+    proceed();
+}
+
+<span class="c">// elsewhere</span>
+<span class="k">synchronized</span> (lock) {
+    conditionIsTrue = <span class="k">true</span>;
+    lock.notifyAll();            <span class="c">// prefer over notify()</span>
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >Why <code>while</code> and not <code>if</code></span
+            >
+            <p>
+              <strong
+                >Spurious wakeups are permitted by the specification</strong
+              >
+              — a thread can return from <code>wait()</code> with nobody having
+              notified it. And with several waiters, another thread may consume
+              the condition before you re-acquire the lock. Re-checking in a
+              loop handles both. An <code>if</code> here is a latent bug that
+              appears under load, months later.
+            </p>
+          </div>
+
+          <h3>ReentrantLock and friends</h3>
+          <p>
+            Everything <code>synchronized</code> does, plus the things it can't:
+            timed attempts, interruptible waiting, fairness, and multiple
+            wait-sets on one lock.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">ReentrantLock</span> lock = <span class="k">new</span> <span class="t">ReentrantLock</span>();
+
+lock.lock();
+<span class="k">try</span> { criticalSection(); }
+<span class="k">finally</span> { lock.unlock(); }        <span class="c">// finally is MANDATORY — no auto-release</span>
+
+<span class="c">// The capabilities synchronized simply doesn't have:</span>
+<span class="k">if</span> (lock.tryLock(<span class="n">2</span>, <span class="t">TimeUnit</span>.SECONDS)) { … }   <span class="c">// give up rather than hang</span>
+lock.lockInterruptibly();                        <span class="c">// cancellable wait</span>
+<span class="k">new</span> <span class="t">ReentrantLock</span>(<span class="k">true</span>);                        <span class="c">// FIFO fairness (slower)</span>
+
+<span class="c">// Many readers OR one writer — good for read-heavy shared state.</span>
+<span class="t">ReadWriteLock</span> rw = <span class="k">new</span> <span class="t">ReentrantReadWriteLock</span>();
+rw.readLock().lock();    <span class="c">// concurrent with other readers</span>
+rw.writeLock().lock();   <span class="c">// exclusive</span>
+
+<span class="c">// StampedLock adds optimistic reads — no lock at all on the happy path,</span>
+<span class="c">// validated afterwards. Fast, but not reentrant. Read the javadoc first.</span></pre>
+          </div>
+
+          <p>
+            Default to <code>synchronized</code>: it's shorter, it can't leak a
+            lock, and the JVM optimises it well. Reach for
+            <code>ReentrantLock</code> when you specifically need a timeout,
+            interruptibility, fairness, or more than one condition queue.
+          </p>
+        </section>
+
+        <!-- ============ 06 ============ -->
+        <section id="p6">
+          <span class="eyebrow">Part 06</span>
+          <h2>The java.util.concurrent toolkit</h2>
+          <p class="lede">
+            Written by experts, tested harder than anything you will write.
+            Reach for these before building your own.
+          </p>
+
+          <h3>Atomics and compare-and-swap</h3>
+          <p>
+            Atomic classes get their safety from a CPU instruction rather than a
+            lock. <strong>Compare-and-swap</strong> says: "set this to N, but
+            only if it's still M." If another thread changed it, the swap fails
+            and you retry with the new value. No blocking, no context switch.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 200"
+                role="img"
+                aria-label="A compare and swap loop reading a value, computing a new one, and retrying when another thread intervenes"
+              >
+                <defs>
+                  <marker
+                    id="a5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g
+                  font-family="IBM Plex Mono, monospace"
+                  font-size="11.5"
+                  color="var(--ink-soft)"
+                >
+                  <rect
+                    x="16"
+                    y="62"
+                    width="118"
+                    height="46"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="75"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    read current
+                  </text>
+                  <text
+                    x="75"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    v = 5
+                  </text>
+
+                  <line
+                    x1="136"
+                    y1="85"
+                    x2="176"
+                    y2="85"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a5)"
+                  />
+
+                  <rect
+                    x="180"
+                    y="62"
+                    width="132"
+                    height="46"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="246"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    compute next
+                  </text>
+                  <text
+                    x="246"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    v + 1 = 6
+                  </text>
+
+                  <line
+                    x1="314"
+                    y1="85"
+                    x2="354"
+                    y2="85"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a5)"
+                  />
+
+                  <rect
+                    x="358"
+                    y="54"
+                    width="164"
+                    height="62"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.2"
+                  />
+                  <text
+                    x="440"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    compareAndSet
+                  </text>
+                  <text
+                    x="440"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-soft)"
+                  >
+                    still 5? → write 6
+                  </text>
+                  <text
+                    x="440"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-soft)"
+                  >
+                    one CPU instruction
+                  </text>
+
+                  <line
+                    x1="524"
+                    y1="72"
+                    x2="576"
+                    y2="72"
+                    stroke="var(--good)"
+                    stroke-width="2.2"
+                    marker-end="url(#a5)"
+                    color="var(--good)"
+                  />
+                  <rect
+                    x="580"
+                    y="52"
+                    width="106"
+                    height="40"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--good)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="633"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--good)"
+                  >
+                    success
+                  </text>
+
+                  <path
+                    d="M440 120 C440 158, 200 168, 75 140 L75 114"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2.2"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#a5)"
+                    color="var(--hot)"
+                  />
+                  <text
+                    x="250"
+                    y="162"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    failed — someone else changed it — retry with the new value
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Optimistic, not pessimistic.</b> A lock assumes conflict and
+              prevents it; CAS assumes no conflict and detects it. Under low
+              contention CAS wins easily. Under heavy contention the retry loop
+              burns CPU — which is exactly what <code>LongAdder</code> exists to
+              fix.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">AtomicInteger</span> counter = <span class="k">new</span> <span class="t">AtomicInteger</span>();
+counter.incrementAndGet();                  <span class="c">// atomic ++</span>
+counter.addAndGet(<span class="n">5</span>);
+counter.compareAndSet(<span class="n">10</span>, <span class="n">20</span>);            <span class="c">// the raw primitive</span>
+counter.updateAndGet(v -&gt; v * <span class="n">2</span>);          <span class="c">// CAS loop for you</span>
+
+<span class="t">AtomicReference</span>&lt;<span class="t">Config</span>&gt; cfg = <span class="k">new</span> <span class="t">AtomicReference</span>&lt;&gt;(initial);
+cfg.updateAndGet(c -&gt; c.withTimeout(<span class="n">30</span>));
+
+<span class="c">// Heavy write contention? LongAdder spreads across internal cells</span>
+<span class="c">// and sums on read. Much faster than AtomicLong for pure counting.</span>
+<span class="t">LongAdder</span> hits = <span class="k">new</span> <span class="t">LongAdder</span>();
+hits.increment();
+hits.sum();</pre>
+          </div>
+
+          <h3>Concurrent collections</h3>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Use</th>
+                  <th>Class</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>General shared map</td>
+                  <td class="name">ConcurrentHashMap</td>
+                  <td>Per-bin locking; reads never block</td>
+                </tr>
+                <tr>
+                  <td>Sorted shared map</td>
+                  <td class="name">ConcurrentSkipListMap</td>
+                  <td>Lock-free, keeps keys ordered</td>
+                </tr>
+                <tr>
+                  <td>Rarely-changing list</td>
+                  <td class="name">CopyOnWriteArrayList</td>
+                  <td>Copies on every write — perfect for listeners</td>
+                </tr>
+                <tr>
+                  <td>Hand work between threads</td>
+                  <td class="name">LinkedBlockingQueue</td>
+                  <td>Blocks when empty or full</td>
+                </tr>
+                <tr>
+                  <td>Bounded handoff</td>
+                  <td class="name">ArrayBlockingQueue</td>
+                  <td>Fixed capacity gives you backpressure</td>
+                </tr>
+                <tr>
+                  <td>Direct handoff</td>
+                  <td class="name">SynchronousQueue</td>
+                  <td>Zero capacity; producer waits for a consumer</td>
+                </tr>
+                <tr>
+                  <td>Scheduled work</td>
+                  <td class="name">DelayQueue</td>
+                  <td>Elements emerge only when due</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Synchronizers</h3>
+          <div class="code">
+            <pre><span class="c">// CountDownLatch — wait for N things, once. Cannot be reset.</span>
+<span class="t">CountDownLatch</span> ready = <span class="k">new</span> <span class="t">CountDownLatch</span>(<span class="n">3</span>);
+<span class="c">// workers: ready.countDown();</span>
+ready.await();                       <span class="c">// blocks until it hits zero</span>
+
+<span class="c">// CyclicBarrier — N threads meet at a point, then all continue. Reusable.</span>
+<span class="t">CyclicBarrier</span> barrier = <span class="k">new</span> <span class="t">CyclicBarrier</span>(<span class="n">3</span>, () -&gt; <span class="t">System</span>.out.println(<span class="s">"round done"</span>));
+barrier.await();
+
+<span class="c">// Semaphore — at most N threads past this point. Rate limiting, pools.</span>
+<span class="t">Semaphore</span> permits = <span class="k">new</span> <span class="t">Semaphore</span>(<span class="n">10</span>);
+permits.acquire();
+<span class="k">try</span> { callRateLimitedApi(); } <span class="k">finally</span> { permits.release(); }</pre>
+          </div>
+        </section>
+
+        <!-- ============ 07 ============ -->
+        <section id="p7">
+          <span class="eyebrow">Part 07</span>
+          <h2>Executors — stop managing threads yourself</h2>
+          <p class="lede">
+            Creating a thread per task doesn't scale: threads are expensive, and
+            unbounded creation is how servers fall over. Submit tasks to a pool
+            instead.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Tasks entering a bounded queue, picked up by a fixed set of worker threads, with overflow going to a rejection handler"
+              >
+                <defs>
+                  <marker
+                    id="a6"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g
+                  font-family="IBM Plex Mono, monospace"
+                  font-size="11.5"
+                  color="var(--ink-soft)"
+                >
+                  <text x="12" y="18" font-size="10.5" fill="var(--ink-faint)">
+                    submitted tasks
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="40"
+                    height="30"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="12"
+                    y="64"
+                    width="40"
+                    height="30"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="12"
+                    y="100"
+                    width="40"
+                    height="30"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="12"
+                    y="136"
+                    width="40"
+                    height="30"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+
+                  <line
+                    x1="58"
+                    y1="96"
+                    x2="98"
+                    y2="96"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a6)"
+                  />
+
+                  <rect
+                    x="102"
+                    y="44"
+                    width="150"
+                    height="104"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="177"
+                    y="68"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    BOUNDED QUEUE
+                  </text>
+                  <rect
+                    x="118"
+                    y="80"
+                    width="118"
+                    height="22"
+                    rx="3"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.2"
+                  />
+                  <rect
+                    x="118"
+                    y="108"
+                    width="118"
+                    height="22"
+                    rx="3"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.2"
+                  />
+                  <text
+                    x="177"
+                    y="164"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    capacity = backpressure
+                  </text>
+
+                  <line
+                    x1="256"
+                    y1="96"
+                    x2="296"
+                    y2="96"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    marker-end="url(#a6)"
+                  />
+
+                  <rect
+                    x="300"
+                    y="22"
+                    width="176"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="388"
+                    y="48"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    worker 1 — busy
+                  </text>
+                  <rect
+                    x="300"
+                    y="74"
+                    width="176"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="388"
+                    y="100"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    worker 2 — busy
+                  </text>
+                  <rect
+                    x="300"
+                    y="126"
+                    width="176"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="388"
+                    y="152"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--val)"
+                  >
+                    worker 3 — busy
+                  </text>
+                  <text
+                    x="388"
+                    y="186"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    a FIXED number of reused threads
+                  </text>
+
+                  <path
+                    d="M177 40 C177 12, 540 8, 560 34"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#a6)"
+                    color="var(--hot)"
+                  />
+                  <rect
+                    x="516"
+                    y="40"
+                    width="170"
+                    height="46"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="601"
+                    y="60"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    queue full →
+                  </text>
+                  <text
+                    x="601"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="600"
+                    fill="var(--hot)"
+                  >
+                    RejectedExecutionHandler
+                  </text>
+                  <text
+                    x="486"
+                    y="112"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    Reject loudly, or run on the
+                  </text>
+                  <text
+                    x="486"
+                    y="128"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    caller's thread to slow it down.
+                  </text>
+                  <text
+                    x="486"
+                    y="152"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    An UNBOUNDED queue here is
+                  </text>
+                  <text x="486" y="168" font-size="10.5" fill="var(--hot)">
+                    how you get an OutOfMemoryError.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The queue is the part people get wrong.</b>
+              <code>Executors.newFixedThreadPool(n)</code> uses an
+              <em>unbounded</em> queue — tasks pile up in memory without limit
+              until the heap dies. For anything load-bearing, construct
+              <code>ThreadPoolExecutor</code> directly with a bounded queue.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// The convenient factories — fine for scripts, risky for servers.</span>
+<span class="t">Executors</span>.newFixedThreadPool(<span class="n">4</span>);      <span class="c">// unbounded queue</span>
+<span class="t">Executors</span>.newCachedThreadPool();       <span class="c">// unbounded THREADS</span>
+<span class="t">Executors</span>.newSingleThreadExecutor();
+<span class="t">Executors</span>.newScheduledThreadPool(<span class="n">2</span>);
+
+<span class="c">// What production code should do — every parameter deliberate.</span>
+<span class="t">ThreadPoolExecutor</span> pool = <span class="k">new</span> <span class="t">ThreadPoolExecutor</span>(
+    <span class="n">4</span>,                                  <span class="c">// core threads, kept alive</span>
+    <span class="n">8</span>,                                  <span class="c">// max threads</span>
+    <span class="n">60</span>, <span class="t">TimeUnit</span>.SECONDS,               <span class="c">// idle timeout for extras</span>
+    <span class="k">new</span> <span class="t">ArrayBlockingQueue</span>&lt;&gt;(<span class="n">100</span>),      <span class="c">// BOUNDED</span>
+    <span class="k">new</span> <span class="t">ThreadPoolExecutor</span>.<span class="t">CallerRunsPolicy</span>()  <span class="c">// natural backpressure</span>
+);
+
+<span class="c">// Getting results back: Callable returns a value and may throw.</span>
+<span class="t">Future</span>&lt;<span class="t">Integer</span>&gt; f = pool.submit(() -&gt; expensiveSum());
+<span class="t">Integer</span> result = f.get();          <span class="c">// BLOCKS until done</span>
+<span class="t">Integer</span> orFail = f.get(<span class="n">5</span>, <span class="t">TimeUnit</span>.SECONDS);   <span class="c">// prefer a timeout</span>
+
+<span class="c">// Shutting down properly — a non-daemon pool keeps the JVM alive.</span>
+pool.shutdown();                                  <span class="c">// no new tasks; finish current</span>
+<span class="k">if</span> (!pool.awaitTermination(<span class="n">30</span>, <span class="t">TimeUnit</span>.SECONDS)) {
+    pool.shutdownNow();                           <span class="c">// interrupt stragglers</span>
+}</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Sizing the pool</span>
+            <p>
+              For <strong>CPU-bound</strong> work, roughly
+              <code>Runtime.getRuntime().availableProcessors()</code> — more
+              threads than cores just adds context switching. For
+              <strong>I/O-bound</strong> work, many more than the core count,
+              because most are parked waiting. The old formula is
+              <code>cores × (1 + waitTime/computeTime)</code>. Virtual threads
+              (Part 09) make this calculation mostly obsolete for the I/O case.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ 08 ============ -->
+        <section id="p8">
+          <span class="eyebrow">Part 08</span>
+          <h2>CompletableFuture</h2>
+          <p class="lede">
+            A plain <code>Future</code> can only be blocked on.
+            <code>CompletableFuture</code> lets you describe what happens next
+            and walk away.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Chain transformations — nothing blocks.</span>
+<span class="t">CompletableFuture</span>.supplyAsync(() -&gt; fetchUser(id))
+    .thenApply(<span class="t">User</span>::name)                 <span class="c">// transform the value</span>
+    .thenApply(<span class="t">String</span>::toUpperCase)
+    .thenAccept(<span class="t">System</span>.out::println)      <span class="c">// consume, return nothing</span>
+    .exceptionally(ex -&gt; {                  <span class="c">// recover from failure</span>
+        log.error(<span class="s">"failed"</span>, ex);
+        <span class="k">return null</span>;
+    });
+
+<span class="c">// Combine two independent async results.</span>
+<span class="t">CompletableFuture</span>&lt;<span class="t">User</span>&gt;  user  = <span class="t">CompletableFuture</span>.supplyAsync(() -&gt; fetchUser(id));
+<span class="t">CompletableFuture</span>&lt;<span class="t">Order</span>&gt; order = <span class="t">CompletableFuture</span>.supplyAsync(() -&gt; fetchOrder(id));
+
+user.thenCombine(order, (u, o) -&gt; <span class="k">new</span> <span class="t">Summary</span>(u, o))
+    .thenAccept(<span class="t">System</span>.out::println);
+
+<span class="c">// thenCompose flattens when the next step is ITSELF async.</span>
+<span class="c">// (thenApply here would give you CompletableFuture&lt;CompletableFuture&lt;X&gt;&gt;.)</span>
+user.thenCompose(u -&gt; <span class="t">CompletableFuture</span>.supplyAsync(() -&gt; loadProfile(u)));
+
+<span class="c">// Wait for many.</span>
+<span class="t">CompletableFuture</span>.allOf(user, order).join();
+<span class="t">CompletableFuture</span>.anyOf(mirrorA, mirrorB);      <span class="c">// first one wins</span>
+
+<span class="c">// Timeouts (Java 9+).</span>
+user.orTimeout(<span class="n">3</span>, <span class="t">TimeUnit</span>.SECONDS)
+    .completeOnTimeout(<span class="t">User</span>.GUEST, <span class="n">2</span>, <span class="t">TimeUnit</span>.SECONDS);</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Two traps worth knowing</span>
+            <p>
+              <strong>The default pool is the common ForkJoinPool</strong>,
+              sized to your core count and shared with parallel streams. Put
+              blocking I/O in there and you starve everything else in the JVM.
+              Pass your own executor: <code>supplyAsync(task, myPool)</code>.
+            </p>
+            <p>
+              <strong>Exceptions vanish if you never consume them.</strong> A
+              failed <code>CompletableFuture</code> with no
+              <code>exceptionally</code>, <code>handle</code>, or terminal
+              <code>join</code> swallows the error entirely — no stack trace, no
+              log line, nothing. Always terminate the chain.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ 09 ============ -->
+        <section id="p9">
+          <span class="eyebrow">Part 09</span>
+          <h2>Virtual threads</h2>
+          <p class="lede">
+            Final in Java 21, and the biggest change to Java concurrency in
+            twenty years. The reason thread pools existed is largely gone.
+          </p>
+
+          <p>
+            A traditional <strong>platform thread</strong> maps 1:1 to an
+            operating-system thread. It costs around a megabyte of stack and a
+            system call to create, so you can afford thousands, not millions.
+            That scarcity is <em>the</em> reason for pooling — you were
+            rationing a scarce resource.
+          </p>
+
+          <p>
+            A <strong>virtual thread</strong> is managed by the JVM instead. Its
+            stack lives on the heap and grows as needed; creating one is roughly
+            as cheap as allocating an object. Many virtual threads are
+            multiplexed onto a small pool of <strong>carrier</strong> platform
+            threads.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="Platform threads mapping one to one onto OS threads, versus many virtual threads mounting onto a few carrier threads"
+              >
+                <g font-family="IBM Plex Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    PLATFORM THREADS — 1:1, expensive, scarce
+                  </text>
+                  <g>
+                    <rect
+                      x="14"
+                      y="30"
+                      width="76"
+                      height="30"
+                      rx="5"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.8"
+                    />
+                    <text
+                      x="52"
+                      y="50"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--val)"
+                    >
+                      thread
+                    </text>
+                    <rect
+                      x="98"
+                      y="30"
+                      width="76"
+                      height="30"
+                      rx="5"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.8"
+                    />
+                    <text
+                      x="136"
+                      y="50"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--val)"
+                    >
+                      thread
+                    </text>
+                    <rect
+                      x="182"
+                      y="30"
+                      width="76"
+                      height="30"
+                      rx="5"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.8"
+                    />
+                    <text
+                      x="220"
+                      y="50"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--val)"
+                    >
+                      thread
+                    </text>
+
+                    <line
+                      x1="52"
+                      y1="62"
+                      x2="52"
+                      y2="80"
+                      stroke="var(--ink-soft)"
+                      stroke-width="1.5"
+                    />
+                    <line
+                      x1="136"
+                      y1="62"
+                      x2="136"
+                      y2="80"
+                      stroke="var(--ink-soft)"
+                      stroke-width="1.5"
+                    />
+                    <line
+                      x1="220"
+                      y1="62"
+                      x2="220"
+                      y2="80"
+                      stroke="var(--ink-soft)"
+                      stroke-width="1.5"
+                    />
+
+                    <rect
+                      x="14"
+                      y="82"
+                      width="76"
+                      height="28"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="52"
+                      y="101"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--ink-soft)"
+                    >
+                      OS thread
+                    </text>
+                    <rect
+                      x="98"
+                      y="82"
+                      width="76"
+                      height="28"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="136"
+                      y="101"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--ink-soft)"
+                    >
+                      OS thread
+                    </text>
+                    <rect
+                      x="182"
+                      y="82"
+                      width="76"
+                      height="28"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="220"
+                      y="101"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--ink-soft)"
+                    >
+                      OS thread
+                    </text>
+
+                    <text
+                      x="14"
+                      y="132"
+                      font-size="10.5"
+                      fill="var(--ink-faint)"
+                    >
+                      ~1 MB stack each · a few thousand is the ceiling
+                    </text>
+                  </g>
+
+                  <line
+                    x1="292"
+                    y1="20"
+                    x2="292"
+                    y2="230"
+                    stroke="var(--rule)"
+                    stroke-width="1.5"
+                  />
+
+                  <text
+                    x="312"
+                    y="18"
+                    font-size="11"
+                    font-weight="600"
+                    fill="var(--ink)"
+                  >
+                    VIRTUAL THREADS — M:N, cheap, millions
+                  </text>
+                  <g>
+                    <rect
+                      x="314"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="340"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="372"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="398"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="430"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="456"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="488"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="514"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="546"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="572"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="604"
+                      y="30"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="630"
+                      y="47"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+
+                    <rect
+                      x="314"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="340"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="372"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="398"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="430"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="456"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="488"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="514"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="546"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="572"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+                    <rect
+                      x="604"
+                      y="60"
+                      width="52"
+                      height="24"
+                      rx="4"
+                      fill="var(--tree-bg)"
+                      stroke="var(--tree)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="630"
+                      y="77"
+                      text-anchor="middle"
+                      font-size="9.5"
+                      fill="var(--tree)"
+                    >
+                      vt
+                    </text>
+
+                    <text x="662" y="62" font-size="14" fill="var(--ink-faint)">
+                      …
+                    </text>
+
+                    <path
+                      d="M400 90 C400 104, 430 104, 430 118"
+                      fill="none"
+                      stroke="var(--ink-soft)"
+                      stroke-width="1.5"
+                    />
+                    <path
+                      d="M540 90 C540 104, 560 104, 560 118"
+                      fill="none"
+                      stroke="var(--ink-soft)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="440"
+                      y="106"
+                      font-size="9.5"
+                      fill="var(--ink-faint)"
+                    >
+                      mounted on
+                    </text>
+
+                    <rect
+                      x="380"
+                      y="120"
+                      width="100"
+                      height="30"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--ink)"
+                      stroke-width="1.8"
+                    />
+                    <text
+                      x="430"
+                      y="140"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--ink)"
+                    >
+                      carrier
+                    </text>
+                    <rect
+                      x="510"
+                      y="120"
+                      width="100"
+                      height="30"
+                      rx="5"
+                      fill="var(--surface-2)"
+                      stroke="var(--ink)"
+                      stroke-width="1.8"
+                    />
+                    <text
+                      x="560"
+                      y="140"
+                      text-anchor="middle"
+                      font-size="10"
+                      fill="var(--ink)"
+                    >
+                      carrier
+                    </text>
+
+                    <text
+                      x="312"
+                      y="172"
+                      font-size="10.5"
+                      fill="var(--ink-faint)"
+                    >
+                      Stack lives on the heap. Blocking UNMOUNTS the virtual
+                    </text>
+                    <text
+                      x="312"
+                      y="188"
+                      font-size="10.5"
+                      fill="var(--ink-faint)"
+                    >
+                      thread and frees the carrier for someone else.
+                    </text>
+                    <text
+                      x="312"
+                      y="212"
+                      font-size="10.5"
+                      font-weight="600"
+                      fill="var(--good)"
+                    >
+                      Carriers ≈ core count. Virtual threads ≈ millions.
+                    </text>
+                  </g>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Blocking stops being expensive.</b> When a virtual thread
+              blocks on I/O, the JVM unmounts it from its carrier and runs
+              something else there. The blocked thread costs a heap object, not
+              an idle OS thread — so "one thread per request" becomes viable
+              again.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// One virtual thread per task. No pool, no sizing, no tuning.</span>
+<span class="k">try</span> (<span class="t">ExecutorService</span> exec = <span class="t">Executors</span>.newVirtualThreadPerTaskExecutor()) {
+    <span class="k">for</span> (<span class="t">Request</span> r : requests) {
+        exec.submit(() -&gt; handle(r));     <span class="c">// a million of these is fine</span>
+    }
+}
+
+<span class="c">// Directly:</span>
+<span class="t">Thread</span> vt = <span class="t">Thread</span>.ofVirtual().start(() -&gt; work());
+<span class="t">Thread</span>.ofVirtual().name(<span class="s">"handler-"</span>, <span class="n">0</span>).factory();
+
+<span class="c">// The code inside is ORDINARY BLOCKING CODE. That's the point —</span>
+<span class="c">// you get async scalability without writing async-style code.</span></pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">What changes in your habits</span>
+            <p>
+              <strong>Don't pool virtual threads.</strong> Pooling exists to
+              reuse something expensive; these are cheap. A pool of virtual
+              threads is strictly worse than one per task.
+            </p>
+            <p>
+              <strong>Use them for blocking I/O, not CPU work.</strong> They
+              don't add compute capacity — the carrier count is still bounded by
+              your cores. For CPU-bound parallelism, a platform-thread pool or
+              parallel streams remains the right tool.
+            </p>
+            <p>
+              <strong>Semaphores replace pool sizing.</strong> If you needed a
+              pool of 10 to limit database connections, use a
+              <code>Semaphore</code> with 10 permits and unlimited virtual
+              threads instead.
+            </p>
+          </div>
+
+          <p>
+            One historical caveat worth knowing if you're on an older runtime:
+            in Java 21 through 23, blocking inside a
+            <code>synchronized</code> block would <strong>pin</strong> the
+            virtual thread to its carrier, defeating the mechanism — the
+            standing advice was to prefer <code>ReentrantLock</code> in hot
+            paths. Java 24 removed that limitation, so on current runtimes
+            <code>synchronized</code> is fine again. Native calls and some
+            legacy code can still pin.
+          </p>
+
+          <h3>Structured concurrency and scoped values</h3>
+          <p>
+            Two companion features from the same effort.
+            <strong>Structured concurrency</strong> treats a group of related
+            tasks as a single unit — if one fails, siblings are cancelled; the
+            scope doesn't exit until all children finish. It removes the classic
+            leak where a failed request leaves orphaned background work running.
+            <strong>Scoped values</strong> are an immutable, better-behaved
+            alternative to <code>ThreadLocal</code> for passing context down a
+            call tree, and they don't leak in pooled threads.
+          </p>
+
+          <p>
+            Check your JDK's release notes for exact status before relying on
+            the structured-concurrency API — it went through several preview
+            rounds with a changing surface, whereas scoped values landed as a
+            final feature in Java 25.
+          </p>
+        </section>
+
+        <!-- ============ 10 ============ -->
+        <section id="p10">
+          <span class="eyebrow">Part 10</span>
+          <h2>Patterns that work</h2>
+
+          <h3>Immutability beats every locking scheme</h3>
+          <p>
+            An object that cannot change cannot be raced. No locks, no volatile,
+            no reasoning about interleavings. This is the single
+            highest-leverage habit in concurrent Java, and records make it
+            nearly free.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Deeply safe: final fields, no setters, defensive copy on the way in.</span>
+<span class="k">record</span> <span class="t">Point</span>(<span class="k">int</span> x, <span class="k">int</span> y) { }
+
+<span class="k">record</span> <span class="t">Config</span>(<span class="t">String</span> host, <span class="t">List</span>&lt;<span class="t">String</span>&gt; tags) {
+    <span class="t">Config</span> {
+        tags = <span class="t">List</span>.copyOf(tags);   <span class="c">// nobody can mutate it later</span>
+    }
+}
+
+<span class="c">// "Change" = build a new one and swap the reference atomically.</span>
+<span class="t">AtomicReference</span>&lt;<span class="t">Config</span>&gt; current = <span class="k">new</span> <span class="t">AtomicReference</span>&lt;&gt;(initial);
+current.updateAndGet(c -&gt; <span class="k">new</span> <span class="t">Config</span>(newHost, c.tags()));</pre>
+          </div>
+
+          <h3>Confinement — don't share in the first place</h3>
+          <p>
+            If only one thread can reach an object, it needs no synchronisation.
+            Give each thread its own copy, or keep mutable state local to a
+            method.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// SimpleDateFormat is notoriously not thread-safe. Give each thread one.</span>
+<span class="k">static final</span> <span class="t">ThreadLocal</span>&lt;<span class="t">SimpleDateFormat</span>&gt; FMT =
+    <span class="t">ThreadLocal</span>.withInitial(() -&gt; <span class="k">new</span> <span class="t">SimpleDateFormat</span>(<span class="s">"yyyy-MM-dd"</span>));
+
+<span class="t">String</span> s = FMT.get().format(<span class="k">new</span> <span class="t">Date</span>());
+
+<span class="c">// In a POOLED thread you must clean up, or the value leaks into</span>
+<span class="c">// whatever task runs next on that thread.</span>
+<span class="k">try</span> { … } <span class="k">finally</span> { FMT.remove(); }
+
+<span class="c">// Better still — DateTimeFormatter is immutable and thread-safe.</span>
+<span class="k">static final</span> <span class="t">DateTimeFormatter</span> F = <span class="t">DateTimeFormatter</span>.ISO_DATE;</pre>
+          </div>
+
+          <h3>Producer–consumer with a blocking queue</h3>
+          <div class="code">
+            <pre><span class="t">BlockingQueue</span>&lt;<span class="t">Job</span>&gt; queue = <span class="k">new</span> <span class="t">ArrayBlockingQueue</span>&lt;&gt;(<span class="n">100</span>);
+
+<span class="c">// Producer — blocks when full, which is the backpressure you want.</span>
+queue.put(job);
+
+<span class="c">// Consumer — blocks when empty. No polling, no sleep loop.</span>
+<span class="k">while</span> (!<span class="t">Thread</span>.currentThread().isInterrupted()) {
+    <span class="t">Job</span> job = queue.take();
+    process(job);
+}
+
+<span class="c">// A POISON PILL is the clean shutdown signal.</span>
+<span class="k">static final</span> <span class="t">Job</span> STOP = <span class="k">new</span> <span class="t">Job</span>();
+<span class="c">// producer: queue.put(STOP);</span>
+<span class="c">// consumer: if (job == STOP) break;</span></pre>
+          </div>
+
+          <h3>Testing and debugging</h3>
+          <ul>
+            <li>
+              <strong>A passing test proves nothing.</strong> Race conditions
+              are timing-dependent; a green run may just mean you got lucky. Run
+              assertions in loops with many threads, and repeat.
+            </li>
+            <li>
+              <strong>Thread dumps</strong> — <code>jstack &lt;pid&gt;</code> or
+              <kbd>Ctrl</kbd>+<kbd>\</kbd>. The JVM detects and reports
+              deadlocks explicitly in the dump; look for "Found one Java-level
+              deadlock".
+            </li>
+            <li>
+              <strong>jcstress</strong> is the OpenJDK harness built
+              specifically for finding memory-model bugs. If you're writing
+              lock-free code, use it.
+            </li>
+            <li>
+              <strong>Name your threads.</strong>
+              <code>new Thread(task, "order-processor-1")</code> turns an
+              unreadable dump into a readable one. Pools take a
+              <code>ThreadFactory</code> for this.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ 11 ============ -->
+        <section id="p11">
+          <span class="eyebrow">Part 11</span>
+          <h2>Ways to get hurt</h2>
+
+          <h3>Double-checked locking without volatile</h3>
+          <p>
+            The canonical broken idiom. Without <code>volatile</code>, another
+            thread can see a non-null reference to an object whose constructor
+            hasn't finished — because the write publishing the reference may be
+            reordered ahead of the writes initialising the fields.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// ✗ BROKEN — instance may be visible before it is fully constructed</span>
+<span class="k">private static</span> <span class="t">Singleton</span> instance;
+<span class="k">static</span> <span class="t">Singleton</span> get() {
+    <span class="k">if</span> (instance == <span class="k">null</span>) {
+        <span class="k">synchronized</span> (<span class="t">Singleton</span>.<span class="k">class</span>) {
+            <span class="k">if</span> (instance == <span class="k">null</span>) instance = <span class="k">new</span> <span class="t">Singleton</span>();
+        }
+    }
+    <span class="k">return</span> instance;
+}
+
+<span class="c">// ✓ Correct — one keyword</span>
+<span class="k">private static volatile</span> <span class="t">Singleton</span> instance;
+
+<span class="c">// ✓✓ Better — the holder idiom. The JVM guarantees class</span>
+<span class="c">//     initialisation is thread-safe and lazy. No locks in your code.</span>
+<span class="k">private static class</span> <span class="t">Holder</span> {
+    <span class="k">static final</span> <span class="t">Singleton</span> INSTANCE = <span class="k">new</span> <span class="t">Singleton</span>();
+}
+<span class="k">static</span> <span class="t">Singleton</span> get() { <span class="k">return</span> <span class="t">Holder</span>.INSTANCE; }</pre>
+          </div>
+
+          <h3>Compound operations on thread-safe collections</h3>
+          <p>Each individual call is atomic. Two calls in sequence are not.</p>
+
+          <div class="code">
+            <pre><span class="t">ConcurrentMap</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; map = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();
+
+<span class="c">// ✗ Two atomic calls do NOT make an atomic sequence.</span>
+<span class="k">if</span> (!map.containsKey(k)) map.put(k, v);      <span class="c">// another thread can interleave</span>
+map.put(k, map.get(k) + <span class="n">1</span>);                  <span class="c">// lost update</span>
+
+<span class="c">// ✓ Single atomic operations</span>
+map.putIfAbsent(k, v);
+map.merge(k, <span class="n">1</span>, <span class="t">Integer</span>::sum);
+map.computeIfAbsent(k, key -&gt; expensive(key));</pre>
+          </div>
+
+          <h3>The rest of the list</h3>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mistake</th>
+                  <th>What happens</th>
+                  <th>Fix</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Sharing a <code>HashMap</code> across threads</td>
+                  <td>
+                    Lost entries, corrupted internals, undefined behaviour
+                  </td>
+                  <td><code>ConcurrentHashMap</code></td>
+                </tr>
+                <tr>
+                  <td>Swallowing <code>InterruptedException</code></td>
+                  <td>Cancellation silently stops working</td>
+                  <td>Rethrow, or restore the flag</td>
+                </tr>
+                <tr>
+                  <td>Never calling <code>shutdown()</code></td>
+                  <td>
+                    JVM never exits — non-daemon pool threads hold it open
+                  </td>
+                  <td>try-with-resources (19+), or a <code>finally</code></td>
+                </tr>
+                <tr>
+                  <td><code>ThreadLocal</code> in a pooled thread</td>
+                  <td>
+                    Value leaks into the next task; classloader leaks in app
+                    servers
+                  </td>
+                  <td><code>remove()</code> in <code>finally</code></td>
+                </tr>
+                <tr>
+                  <td>Blocking inside <code>computeIfAbsent</code></td>
+                  <td>Bin lock held during I/O; possible deadlock</td>
+                  <td>Compute outside, then insert</td>
+                </tr>
+                <tr>
+                  <td>Blocking work on the common ForkJoinPool</td>
+                  <td>Starves parallel streams and every other user</td>
+                  <td>Pass an explicit executor</td>
+                </tr>
+                <tr>
+                  <td>Calling <code>get()</code> with no timeout</td>
+                  <td>One stuck task hangs the caller indefinitely</td>
+                  <td><code>get(n, TimeUnit…)</code></td>
+                </tr>
+                <tr>
+                  <td>Locks acquired in inconsistent order</td>
+                  <td>Deadlock under load, never in testing</td>
+                  <td>One global lock ordering</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>if</code> instead of <code>while</code> around
+                    <code>wait()</code>
+                  </td>
+                  <td>
+                    Proceeds on a spurious wakeup with the condition false
+                  </td>
+                  <td>Always loop</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ 12 ============ -->
+        <section id="p12">
+          <span class="eyebrow">Part 12</span>
+          <h2>A learning path</h2>
+          <p class="lede">
+            Roughly the order that builds correctly on itself. Write code at
+            each step — this subject does not stick from reading.
+          </p>
+
+          <ol class="path">
+            <li>
+              <b>Threads and the lifecycle</b
+              ><span
+                >Start threads, join them, watch states. Write something that
+                interleaves visibly.</span
+              >
+            </li>
+            <li>
+              <b>Break something on purpose</b
+              ><span
+                >Two threads, one unsynchronised counter, a million increments
+                each. Watch the total come out wrong. This makes the rest
+                concrete.</span
+              >
+            </li>
+            <li>
+              <b>Fix it three ways</b
+              ><span
+                ><code>synchronized</code>, then <code>AtomicInteger</code>,
+                then <code>LongAdder</code>. Understand why all three work and
+                how they differ.</span
+              >
+            </li>
+            <li>
+              <b>Visibility and volatile</b
+              ><span
+                >Reproduce the non-terminating loop. Fix it with
+                <code>volatile</code>. Learn what volatile does
+                <em>not</em> do.</span
+              >
+            </li>
+            <li>
+              <b>happens-before</b
+              ><span
+                >The mental model everything else rests on. Come back to this
+                repeatedly.</span
+              >
+            </li>
+            <li>
+              <b>Executors and Future</b
+              ><span
+                >Stop creating threads by hand. Learn pool sizing and why
+                unbounded queues are dangerous.</span
+              >
+            </li>
+            <li>
+              <b>Concurrent collections</b
+              ><span
+                ><code>ConcurrentHashMap</code> and <code>BlockingQueue</code>.
+                Build a producer - consumer pipeline.</span
+              >
+            </li>
+            <li>
+              <b>Cause a deadlock</b
+              ><span
+                >Two locks, opposite order. Then find it in a
+                <code>jstack</code> dump. This skill pays for itself.</span
+              >
+            </li>
+            <li>
+              <b>CompletableFuture</b
+              ><span
+                >Compose async work without blocking. Watch out for the common
+                pool.</span
+              >
+            </li>
+            <li>
+              <b>Virtual threads</b
+              ><span
+                >Java 21+. Re-solve an earlier problem with one thread per task
+                and compare.</span
+              >
+            </li>
+            <li>
+              <b>Immutability as strategy</b
+              ><span
+                >Go back and redesign something so the concurrency problem
+                disappears rather than getting solved.</span
+              >
+            </li>
+          </ol>
+
+          <div class="note">
+            <span class="tag">Worth reading</span>
+            <p>
+              <em>Java Concurrency in Practice</em> (Goetz et al.) is still the
+              definitive book despite predating everything from Part 08 onward —
+              the reasoning about the memory model, publication, and design has
+              not aged. Pair it with the JEPs for virtual threads and structured
+              concurrency to fill the modern gap.
+            </p>
+          </div>
+
+          <h3>The short version</h3>
+          <ul>
+            <li>
+              Don't share mutable state. Immutability and confinement eliminate
+              problems instead of managing them.
+            </li>
+            <li>
+              When you must share, use <code>java.util.concurrent</code> rather
+              than writing your own.
+            </li>
+            <li>
+              When you must lock, keep the critical section small, never do I/O
+              inside it, and always acquire in a consistent order.
+            </li>
+            <li>
+              <code>volatile</code> is for visibility of a single field. It is
+              not a lock.
+            </li>
+            <li>Every blocking call deserves a timeout.</li>
+            <li>
+              On Java 21+, one virtual thread per task beats a carefully tuned
+              pool for I/O-bound work.
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

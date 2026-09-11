@@ -1,0 +1,3077 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Trees</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">Foundations</div>
+          <a href="#anatomy">Anatomy of a tree</a>
+          <a href="#bst">Binary search trees</a>
+          <a href="#traversal">The four traversals</a>
+          <div class="grp">Balance</div>
+          <a href="#degenerate">Why balance matters</a>
+          <a href="#rotations">Rotations</a>
+          <a href="#redblack">Red-black trees</a>
+          <div class="grp">In the JDK</div>
+          <a href="#treemap">TreeMap and TreeSet</a>
+          <a href="#ordering">The ordering contract</a>
+          <a href="#elsewhere">Trees hiding elsewhere</a>
+          <div class="grp">Beyond the JDK</div>
+          <a href="#trie">Tries</a>
+          <a href="#btree">B-trees</a>
+          <div class="grp">Reference</div>
+          <a href="#recursion">Recursion and depth</a>
+          <a href="#complexity">Complexity</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            trees in java &middot; from traversal to red-black
+          </p>
+          <h1>Inside Trees</h1>
+          <p class="dek">
+            A tree trades the flat O(1) of a hash table for something a hash
+            table can never give you: <em>order</em>. Everything below —
+            balancing, rotations, the colour bits in <code>TreeMap</code> —
+            exists to keep that trade honest.
+          </p>
+        </header>
+
+        <!-- ============ ANATOMY ============ -->
+        <section id="anatomy">
+          <h2>Anatomy of a tree</h2>
+          <p class="lede">
+            Nodes connected so that every node has exactly one parent, except
+            one that has none. No cycles, no second route to anywhere.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="A labelled tree showing root, internal nodes, leaves, an edge, a subtree, and the height and depth measurements"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <line
+                    x1="300"
+                    y1="50"
+                    x2="190"
+                    y2="106"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="300"
+                    y1="50"
+                    x2="410"
+                    y2="106"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="190"
+                    y1="134"
+                    x2="130"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="190"
+                    y1="134"
+                    x2="250"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="410"
+                    y1="134"
+                    x2="470"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="300"
+                    cy="44"
+                    r="22"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="300"
+                    y="50"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    A
+                  </text>
+                  <text
+                    x="300"
+                    y="14"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    root — the only parentless node
+                  </text>
+
+                  <circle
+                    cx="190"
+                    cy="120"
+                    r="21"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="190"
+                    y="126"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="410"
+                    cy="120"
+                    r="21"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="410"
+                    y="126"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+
+                  <circle
+                    cx="130"
+                    cy="196"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="130"
+                    y="202"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    D
+                  </text>
+                  <circle
+                    cx="250"
+                    cy="196"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="250"
+                    y="202"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    E
+                  </text>
+                  <circle
+                    cx="470"
+                    cy="196"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="470"
+                    y="202"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    F
+                  </text>
+
+                  <text
+                    x="190"
+                    y="234"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-soft)"
+                  >
+                    leaves — no children
+                  </text>
+
+                  <text x="238" y="86" font-size="10" fill="var(--ink-faint)">
+                    edge
+                  </text>
+
+                  <text
+                    x="540"
+                    y="44"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    height = 2
+                  </text>
+                  <text x="540" y="60" font-size="10" fill="var(--ink-faint)">
+                    longest root→leaf
+                  </text>
+                  <text
+                    x="540"
+                    y="88"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    depth(B) = 1
+                  </text>
+                  <text x="540" y="104" font-size="10" fill="var(--ink-faint)">
+                    edges from the root
+                  </text>
+                  <text
+                    x="540"
+                    y="132"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    B's subtree
+                  </text>
+                  <text x="540" y="148" font-size="10" fill="var(--ink-faint)">
+                    B, D and E — itself a tree
+                  </text>
+                  <text
+                    x="540"
+                    y="176"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    binary = ≤ 2 children
+                  </text>
+                  <text x="540" y="192" font-size="10" fill="var(--ink-faint)">
+                    n-ary allows more
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Every subtree is a tree.</b> That self-similarity is why almost
+              every tree algorithm is three lines of recursion — you handle one
+              node and delegate the rest to yourself.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// The whole data structure. There is nothing else to it.</span>
+<span class="k">class</span> <span class="t">Node</span>&lt;<span class="t">T</span>&gt; {
+    <span class="t">T</span> value;
+    <span class="t">Node</span>&lt;<span class="t">T</span>&gt; left, right;
+    <span class="t">Node</span>(<span class="t">T</span> value) { <span class="k">this</span>.value = value; }
+}
+
+<span class="c">// Counting nodes — the shape of nearly every tree method you'll write</span>
+<span class="k">static int</span> size(<span class="t">Node</span>&lt;?&gt; n) {
+    <span class="k">return</span> n == <span class="k">null</span> ? <span class="n">0</span> : <span class="n">1</span> + size(n.left) + size(n.right);
+}
+
+<span class="k">static int</span> height(<span class="t">Node</span>&lt;?&gt; n) {
+    <span class="k">return</span> n == <span class="k">null</span> ? -<span class="n">1</span> : <span class="n">1</span> + <span class="t">Math</span>.max(height(n.left), height(n.right));
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ BST ============ -->
+        <section id="bst">
+          <h2>Binary search trees</h2>
+          <p class="lede">
+            Add one rule to a binary tree and it becomes searchable:
+            <strong
+              >everything left is smaller, everything right is larger</strong
+            >
+            — and that holds at every node, not just the root.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="A binary search tree with the path to a target value highlighted, discarding half the remaining tree at each step"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <line
+                    x1="330"
+                    y1="46"
+                    x2="200"
+                    y2="102"
+                    stroke="var(--key)"
+                    stroke-width="3.5"
+                  />
+                  <line
+                    x1="330"
+                    y1="46"
+                    x2="460"
+                    y2="102"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="200"
+                    y1="130"
+                    x2="130"
+                    y2="176"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="200"
+                    y1="130"
+                    x2="270"
+                    y2="176"
+                    stroke="var(--key)"
+                    stroke-width="3.5"
+                  />
+                  <line
+                    x1="460"
+                    y1="130"
+                    x2="400"
+                    y2="176"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="460"
+                    y1="130"
+                    x2="520"
+                    y2="176"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="330"
+                    cy="40"
+                    r="22"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="330"
+                    y="46"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    50
+                  </text>
+
+                  <circle
+                    cx="200"
+                    cy="116"
+                    r="21"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="200"
+                    y="122"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    30
+                  </text>
+                  <circle
+                    cx="460"
+                    cy="116"
+                    r="21"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="460"
+                    y="122"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    70
+                  </text>
+
+                  <circle
+                    cx="130"
+                    cy="190"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="130"
+                    y="196"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    20
+                  </text>
+                  <circle
+                    cx="270"
+                    cy="190"
+                    r="20"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3.5"
+                  />
+                  <text
+                    x="270"
+                    y="196"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    40
+                  </text>
+                  <circle
+                    cx="400"
+                    cy="190"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="400"
+                    y="196"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    60
+                  </text>
+                  <circle
+                    cx="520"
+                    cy="190"
+                    r="20"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="520"
+                    y="196"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    80
+                  </text>
+
+                  <text
+                    x="12"
+                    y="24"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    searching for 40
+                  </text>
+                  <text x="560" y="46" font-size="10.5" fill="var(--ink-soft)">
+                    40 &lt; 50 → go left
+                  </text>
+                  <text x="560" y="122" font-size="10.5" fill="var(--ink-soft)">
+                    40 &gt; 30 → go right
+                  </text>
+                  <text
+                    x="560"
+                    y="196"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    found
+                  </text>
+
+                  <text x="12" y="220" font-size="10.5" fill="var(--ink-soft)">
+                    Each comparison discards half of what's left — which is
+                    where log n comes from.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The invariant is recursive.</b> It isn't "the left child is
+              smaller" — it's that <em>every</em> value in the left subtree is
+              smaller. Checking only the immediate children is the classic wrong
+              answer to "validate this BST".
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// Search — three lines, and the whole point of the structure</span>
+<span class="k">static</span> <span class="t">Node</span> find(<span class="t">Node</span> n, <span class="k">int</span> key) {
+    <span class="k">if</span> (n == <span class="k">null</span> || n.value == key) <span class="k">return</span> n;
+    <span class="k">return</span> key &lt; n.value ? find(n.left, key) : find(n.right, key);
+}
+
+<span class="c">// Validating one — note the RANGE, not just the parent</span>
+<span class="k">static boolean</span> isBst(<span class="t">Node</span> n, <span class="k">long</span> min, <span class="k">long</span> max) {
+    <span class="k">if</span> (n == <span class="k">null</span>) <span class="k">return true</span>;
+    <span class="k">if</span> (n.value &lt;= min || n.value &gt;= max) <span class="k">return false</span>;
+    <span class="k">return</span> isBst(n.left, min, n.value) &amp;&amp; isBst(n.right, n.value, max);
+}
+<span class="c">// call with Long.MIN_VALUE, Long.MAX_VALUE</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ TRAVERSAL ============ -->
+        <section id="traversal">
+          <h2>The four traversals</h2>
+          <p class="lede">
+            Same tree, four visiting orders, four different uses. The only thing
+            that changes in the first three is
+            <em>when you touch the node</em> relative to the recursive calls.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 290"
+                role="img"
+                aria-label="One tree traversed four ways, showing the output sequence produced by in-order, pre-order, post-order and level-order"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <line
+                    x1="150"
+                    y1="42"
+                    x2="90"
+                    y2="90"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="150"
+                    y1="42"
+                    x2="210"
+                    y2="90"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="90"
+                    y1="116"
+                    x2="50"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="90"
+                    y1="116"
+                    x2="130"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="150"
+                    cy="36"
+                    r="20"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="150"
+                    y="42"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    F
+                  </text>
+                  <circle
+                    cx="90"
+                    cy="104"
+                    r="19"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="90"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="210"
+                    cy="104"
+                    r="19"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="210"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    G
+                  </text>
+                  <circle
+                    cx="50"
+                    cy="174"
+                    r="18"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="50"
+                    y="180"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="130"
+                    cy="174"
+                    r="18"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="130"
+                    y="180"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    D
+                  </text>
+
+                  <rect
+                    x="270"
+                    y="20"
+                    width="416"
+                    height="52"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="286"
+                    y="40"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    IN-ORDER left · NODE · right
+                  </text>
+                  <text
+                    x="286"
+                    y="58"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A B D F G
+                  </text>
+                  <text x="500" y="58" font-size="10" fill="var(--val)">
+                    ← sorted, for a BST
+                  </text>
+
+                  <rect
+                    x="270"
+                    y="80"
+                    width="416"
+                    height="52"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="286"
+                    y="100"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    PRE-ORDER NODE · left · right
+                  </text>
+                  <text
+                    x="286"
+                    y="118"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    F B A D G
+                  </text>
+                  <text x="500" y="118" font-size="10" fill="var(--ink-faint)">
+                    ← copying, serialising
+                  </text>
+
+                  <rect
+                    x="270"
+                    y="140"
+                    width="416"
+                    height="52"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="286"
+                    y="160"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    POST-ORDER left · right · NODE
+                  </text>
+                  <text
+                    x="286"
+                    y="178"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    A D B G F
+                  </text>
+                  <text x="500" y="178" font-size="10" fill="var(--ink-faint)">
+                    ← deleting, evaluating
+                  </text>
+
+                  <rect
+                    x="270"
+                    y="200"
+                    width="416"
+                    height="52"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="286"
+                    y="220"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    LEVEL-ORDER row by row
+                  </text>
+                  <text
+                    x="286"
+                    y="238"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    F B G A D
+                  </text>
+                  <text x="500" y="238" font-size="10" fill="var(--key)">
+                    ← a queue, not recursion
+                  </text>
+
+                  <text x="12" y="276" font-size="10.5" fill="var(--ink-soft)">
+                    The first three differ only in where the visit sits among
+                    the two recursive calls.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>In-order on a BST yields sorted output.</b> That single fact is
+              why <code>TreeMap</code> iterates in key order for free — no
+              sorting step, just a walk.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// Move one line and you change the traversal.</span>
+<span class="k">static void</span> inOrder(<span class="t">Node</span> n, <span class="t">Consumer</span>&lt;<span class="t">Node</span>&gt; visit) {
+    <span class="k">if</span> (n == <span class="k">null</span>) <span class="k">return</span>;
+    inOrder(n.left, visit);
+    visit.accept(n);                <span class="c">// ← in the middle</span>
+    inOrder(n.right, visit);
+}
+
+<span class="c">// Level-order needs a queue, not the call stack</span>
+<span class="k">static void</span> levelOrder(<span class="t">Node</span> root, <span class="t">Consumer</span>&lt;<span class="t">Node</span>&gt; visit) {
+    <span class="k">if</span> (root == <span class="k">null</span>) <span class="k">return</span>;
+    <span class="t">Deque</span>&lt;<span class="t">Node</span>&gt; q = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+    q.add(root);
+    <span class="k">while</span> (!q.isEmpty()) {
+        <span class="t">Node</span> n = q.poll();
+        visit.accept(n);
+        <span class="k">if</span> (n.left  != <span class="k">null</span>) q.add(n.left);
+        <span class="k">if</span> (n.right != <span class="k">null</span>) q.add(n.right);
+    }
+}
+
+<span class="c">// Iterative in-order — an explicit stack, no recursion depth limit</span>
+<span class="t">Deque</span>&lt;<span class="t">Node</span>&gt; stack = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+<span class="t">Node</span> cur = root;
+<span class="k">while</span> (cur != <span class="k">null</span> || !stack.isEmpty()) {
+    <span class="k">while</span> (cur != <span class="k">null</span>) { stack.push(cur); cur = cur.left; }
+    cur = stack.pop();
+    visit.accept(cur);
+    cur = cur.right;
+}</pre>
+          </div>
+
+          <p>
+            Swap the queue for a stack in <code>levelOrder</code> and you get
+            depth-first instead — the container is the algorithm. That's the
+            same trick as the recursion-to-iteration conversion in
+            <a href="04-inside-stacks-and-queues.html"
+              ><strong>Inside Stacks and Queues</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ DEGENERATE ============ -->
+        <section id="degenerate">
+          <h2>Why balance matters</h2>
+          <p class="lede">
+            A BST's O(log n) is a promise about <em>shape</em>, not about the
+            structure. Insert sorted data into a plain BST and you rebuild a
+            linked list with extra pointers.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 276"
+                role="img"
+                aria-label="The same five keys inserted in sorted order producing a degenerate chain, versus balanced insertion producing a shallow tree"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="20"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    inserted 10, 20, 30, 40, 50 — in that order
+                  </text>
+
+                  <line
+                    x1="60"
+                    y1="52"
+                    x2="100"
+                    y2="88"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="110"
+                    y1="110"
+                    x2="150"
+                    y2="146"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="160"
+                    y1="168"
+                    x2="200"
+                    y2="204"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="210"
+                    y1="226"
+                    x2="236"
+                    y2="244"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="52"
+                    cy="44"
+                    r="18"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="52"
+                    y="49"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    10
+                  </text>
+                  <circle
+                    cx="108"
+                    cy="100"
+                    r="18"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="108"
+                    y="105"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    20
+                  </text>
+                  <circle
+                    cx="158"
+                    cy="158"
+                    r="18"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="158"
+                    y="163"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    30
+                  </text>
+                  <circle
+                    cx="208"
+                    cy="216"
+                    r="18"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="208"
+                    y="221"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    40
+                  </text>
+                  <circle
+                    cx="252"
+                    cy="252"
+                    r="16"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="252"
+                    y="257"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    50
+                  </text>
+
+                  <text
+                    x="290"
+                    y="120"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    height 4 — a list
+                  </text>
+                  <text x="290" y="138" font-size="10.5" fill="var(--hot)">
+                    find(50) costs 5 steps
+                  </text>
+                  <text x="290" y="156" font-size="10.5" fill="var(--hot)">
+                    O(n), not O(log n)
+                  </text>
+
+                  <line
+                    x1="410"
+                    y1="20"
+                    x2="410"
+                    y2="250"
+                    stroke="var(--rule)"
+                    stroke-width="1.5"
+                  />
+
+                  <text
+                    x="430"
+                    y="20"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    the same keys, balanced
+                  </text>
+
+                  <line
+                    x1="560"
+                    y1="58"
+                    x2="500"
+                    y2="102"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="560"
+                    y1="58"
+                    x2="620"
+                    y2="102"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="500"
+                    y1="130"
+                    x2="462"
+                    y2="166"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="620"
+                    y1="130"
+                    x2="658"
+                    y2="166"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="560"
+                    cy="52"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="560"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    30
+                  </text>
+                  <circle
+                    cx="500"
+                    cy="116"
+                    r="18"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="500"
+                    y="121"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    20
+                  </text>
+                  <circle
+                    cx="620"
+                    cy="116"
+                    r="18"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="620"
+                    y="121"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    40
+                  </text>
+                  <circle
+                    cx="458"
+                    cy="180"
+                    r="17"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="458"
+                    y="185"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    10
+                  </text>
+                  <circle
+                    cx="662"
+                    cy="180"
+                    r="17"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="662"
+                    y="185"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    50
+                  </text>
+
+                  <text
+                    x="470"
+                    y="226"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    height 2 — find(50) costs 3
+                  </text>
+                  <text x="470" y="246" font-size="10.5" fill="var(--val)">
+                    self-balancing keeps it this way
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Sorted input is the worst case, and it's common.</b> Importing
+              records by id, replaying a time series, loading a sorted file —
+              all produce exactly this. A self-balancing tree restructures as it
+              goes so the shape can't degrade.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ ROTATIONS ============ -->
+        <section id="rotations">
+          <h2>Rotations</h2>
+          <p class="lede">
+            The one operation every self-balancing tree is built from. It
+            re-hangs three pointers, changes the height, and
+            <strong>preserves the ordering</strong> — which is what makes it
+            safe.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="A left rotation moving the right child up and the parent down, with the in-order sequence unchanged before and after"
+              >
+                <defs>
+                  <marker
+                    id="t1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="20" font-size="11" fill="var(--hot)">
+                    right-heavy
+                  </text>
+
+                  <line
+                    x1="90"
+                    y1="52"
+                    x2="90"
+                    y2="92"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="104"
+                    y1="58"
+                    x2="164"
+                    y2="96"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="178"
+                    y1="124"
+                    x2="138"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="190"
+                    y1="124"
+                    x2="230"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="90"
+                    cy="44"
+                    r="19"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="90"
+                    y="49"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    P
+                  </text>
+                  <circle
+                    cx="62"
+                    cy="108"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="62"
+                    y="113"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    a
+                  </text>
+                  <circle
+                    cx="184"
+                    cy="110"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="184"
+                    y="115"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+                  <circle
+                    cx="132"
+                    cy="174"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="132"
+                    y="179"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    b
+                  </text>
+                  <circle
+                    cx="238"
+                    cy="174"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="238"
+                    y="179"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    c
+                  </text>
+
+                  <line
+                    x1="290"
+                    y1="110"
+                    x2="360"
+                    y2="110"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                    marker-end="url(#t1)"
+                  />
+                  <text
+                    x="325"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    rotate left
+                  </text>
+                  <text
+                    x="325"
+                    y="130"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    O(1)
+                  </text>
+
+                  <text x="400" y="20" font-size="11" fill="var(--val)">
+                    balanced
+                  </text>
+
+                  <line
+                    x1="500"
+                    y1="58"
+                    x2="452"
+                    y2="96"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="514"
+                    y1="58"
+                    x2="562"
+                    y2="96"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="440"
+                    y1="124"
+                    x2="410"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="452"
+                    y1="124"
+                    x2="482"
+                    y2="160"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="507"
+                    cy="44"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="507"
+                    y="49"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+                  <circle
+                    cx="446"
+                    cy="110"
+                    r="19"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="446"
+                    y="115"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    P
+                  </text>
+                  <circle
+                    cx="568"
+                    cy="110"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="568"
+                    y="115"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    c
+                  </text>
+                  <circle
+                    cx="404"
+                    cy="174"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="404"
+                    y="179"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    a
+                  </text>
+                  <circle
+                    cx="488"
+                    cy="174"
+                    r="17"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="488"
+                    y="179"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    b
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="196"
+                    width="674"
+                    height="26"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="214"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    in-order before: a P b C c · in-order after: a P b C c —
+                    identical
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Ordering survives, height changes.</b> Subtree
+              <code>b</code> moves from C's left to P's right, which is exactly
+              where it still belongs. AVL and red-black trees differ only in
+              <em>when</em> they decide to rotate.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ REDBLACK ============ -->
+        <section id="redblack">
+          <h2>Red-black trees</h2>
+          <p class="lede">
+            One extra bit per node, four rules, and a guaranteed height of at
+            most 2·log₂(n+1). This is what <code>TreeMap</code> and
+            <code>TreeSet</code> are.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Rule</th>
+                  <th>Why it's there</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">1</td>
+                  <td>Every node is red or black</td>
+                  <td>The extra bit</td>
+                </tr>
+                <tr>
+                  <td class="mono">2</td>
+                  <td>The root is black</td>
+                  <td>Simplifies the cases</td>
+                </tr>
+                <tr>
+                  <td class="mono">3</td>
+                  <td>A red node's children are black</td>
+                  <td>No two reds in a row</td>
+                </tr>
+                <tr>
+                  <td class="mono">4</td>
+                  <td>
+                    Every root-to-leaf path has the same number of black nodes
+                  </td>
+                  <td><b>The one that forces balance</b></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Rules 3 and 4 together do the work. If every path has the same black
+            count, and reds can never be adjacent, the longest possible path is
+            at most twice the shortest — alternating red and black against an
+            all-black path. That bound is the guarantee.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>AVL</th>
+                  <th>Red-black</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Balance condition</td>
+                  <td>Heights differ by ≤ 1</td>
+                  <td>The four rules above</td>
+                </tr>
+                <tr>
+                  <td>Height bound</td>
+                  <td class="y">~1.44 log n — tighter</td>
+                  <td>2 log n</td>
+                </tr>
+                <tr>
+                  <td>Lookups</td>
+                  <td class="y">Slightly faster</td>
+                  <td>Slightly slower</td>
+                </tr>
+                <tr>
+                  <td>Insert / delete</td>
+                  <td>More rotations</td>
+                  <td class="y">Fewer rotations</td>
+                </tr>
+                <tr>
+                  <td>In the JDK</td>
+                  <td class="n">No</td>
+                  <td class="y">TreeMap, TreeSet, treeified HashMap bins</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            The JDK chose red-black because mixed workloads dominate: a little
+            slower to search, meaningfully cheaper to modify. AVL wins when
+            reads vastly outnumber writes — which is common enough in databases,
+            and rare enough in general-purpose collections.
+          </p>
+        </section>
+
+        <!-- ============ TREEMAP ============ -->
+        <section id="treemap">
+          <h2>TreeMap and TreeSet</h2>
+          <p class="lede">
+            The JDK's sorted collections. Everything they offer beyond
+            <code>HashMap</code> comes from one property: the keys are in order,
+            all the time.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Structure</dt>
+              <dd>Red-black tree</dd>
+            </div>
+            <div>
+              <dt>get / put / remove</dt>
+              <dd>O(log n) always</dd>
+            </div>
+            <div>
+              <dt>Iteration</dt>
+              <dd>Sorted by key</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">NPE by default</dd>
+            </div>
+            <div>
+              <dt>TreeSet is</dt>
+              <dd>A TreeMap with dummy values</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="t">NavigableMap</span>&lt;<span class="t">Integer</span>, <span class="t">String</span>&gt; m = <span class="k">new</span> <span class="t">TreeMap</span>&lt;&gt;();
+m.put(<span class="n">10</span>, <span class="s">"a"</span>); m.put(<span class="n">20</span>, <span class="s">"b"</span>); m.put(<span class="n">30</span>, <span class="s">"c"</span>);
+
+<span class="c">// The queries a HashMap simply cannot answer</span>
+m.floorKey(<span class="n">25</span>);        <span class="c">// 20 — greatest key ≤ 25</span>
+m.ceilingKey(<span class="n">25</span>);      <span class="c">// 30 — least key ≥ 25</span>
+m.lowerKey(<span class="n">20</span>);        <span class="c">// 10 — strictly less</span>
+m.higherKey(<span class="n">20</span>);       <span class="c">// 30 — strictly greater</span>
+m.firstEntry();         <span class="c">// 10=a</span>
+m.headMap(<span class="n">20</span>, <span class="k">true</span>);  <span class="c">// {10=a, 20=b} — a live VIEW, not a copy</span>
+m.descendingMap();      <span class="c">// reversed view</span>
+m.pollFirstEntry();     <span class="c">// remove and return the smallest</span>
+
+<span class="c">// TreeSet is the same tree with the values thrown away</span>
+<span class="t">NavigableSet</span>&lt;<span class="t">String</span>&gt; s = <span class="k">new</span> <span class="t">TreeSet</span>&lt;&gt;(<span class="t">Comparator</span>.comparing(<span class="t">String</span>::length));
+s.subSet(<span class="s">"aa"</span>, <span class="s">"zz"</span>);</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Range views are live and cheap</span>
+            <p>
+              <code>headMap</code>, <code>tailMap</code> and
+              <code>subMap</code> return <em>views</em> backed by the original
+              tree — no copying, and writes pass through in both directions.
+              <code>map.headMap(cutoff).clear()</code> deletes that whole range
+              from the underlying map, which is the tidiest expiry idiom in the
+              JDK.
+            </p>
+          </div>
+
+          <p>
+            The full <code>TreeMap</code> treatment — including how it compares
+            against every other Map implementation — is in
+            <a href="01-inside-java-maps.html"
+              ><strong>Inside Java Maps</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ ORDERING ============ -->
+        <section id="ordering">
+          <h2>The ordering contract</h2>
+          <p class="lede">
+            A tree map has no use for <code>hashCode()</code> or
+            <code>equals()</code>. Two keys are "the same key" exactly when the
+            comparison returns zero — and that catches people out.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// The comparator decides identity, not equals()</span>
+<span class="t">TreeMap</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; ci = <span class="k">new</span> <span class="t">TreeMap</span>&lt;&gt;(<span class="t">String</span>.CASE_INSENSITIVE_ORDER);
+ci.put(<span class="s">"Apple"</span>, <span class="n">1</span>);
+ci.put(<span class="s">"APPLE"</span>, <span class="n">2</span>);      <span class="c">// compares equal → overwrites</span>
+ci.size();                 <span class="c">// 1  — a HashMap would hold 2</span>
+
+<span class="c">// A comparator that only looks at part of the object silently</span>
+<span class="c">// collapses distinct entries:</span>
+<span class="k">new</span> <span class="t">TreeSet</span>&lt;&gt;(<span class="t">Comparator</span>.comparing(<span class="t">Person</span>::lastName));
+<span class="c">// every Smith after the first is dropped — same "key"</span>
+
+<span class="c">// ✓ Make it total: break ties on something unique</span>
+<span class="t">Comparator</span>.comparing(<span class="t">Person</span>::lastName).thenComparing(<span class="t">Person</span>::id);
+
+<span class="c">// Null keys fail, because comparing null throws</span>
+m.put(<span class="k">null</span>, <span class="s">"x"</span>);         <span class="c">// NullPointerException</span></pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Mutating a key corrupts the tree</span>
+            <p>
+              The key's position was chosen by comparisons made at insert time.
+              Change a field the comparator reads and the node is now in the
+              wrong place — searches walk past it, and the entry becomes
+              unreachable while still occupying memory. Exactly the same hazard
+              as mutating a <code>HashMap</code> key, with a different
+              mechanism. Use immutable keys.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ ELSEWHERE ============ -->
+        <section id="elsewhere">
+          <h2>Trees hiding elsewhere</h2>
+          <p class="lede">
+            Several things you use daily are trees without saying so.
+          </p>
+
+          <div class="trio">
+            <div>
+              <h5>Treeified HashMap bins</h5>
+              <p>
+                A bucket with 8+ collisions converts to a red-black tree, so a
+                bad <code>hashCode()</code> degrades to O(log n) rather than
+                O(n).
+              </p>
+            </div>
+            <div>
+              <h5>PriorityQueue</h5>
+              <p>
+                A binary heap — a tree by shape, stored in a flat array. Only
+                the root is ordered; it is <em>not</em> a BST.
+              </p>
+            </div>
+            <div>
+              <h5>File systems and the DOM</h5>
+              <p>
+                N-ary trees. <code>Files.walk()</code> is a depth-first
+                traversal returning a lazy stream.
+              </p>
+            </div>
+          </div>
+
+          <p>
+            The heap is covered properly in
+            <a href="04-inside-stacks-and-queues.html"
+              ><strong>Inside Stacks and Queues</strong></a
+            >, and treeification in
+            <a href="01-inside-java-maps.html"
+              ><strong>Inside Java Maps</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ TRIE ============ -->
+        <section id="trie">
+          <h2>Tries</h2>
+          <p class="lede">
+            A prefix tree. The key isn't stored in a node — it's spelled out by
+            the <em>path</em> you take to reach it.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="A trie storing car, cat and dog, where the path spells the word and terminal nodes are marked"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <circle
+                    cx="80"
+                    cy="106"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="80"
+                    y="111"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    ·
+                  </text>
+                  <text
+                    x="80"
+                    y="140"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    root
+                  </text>
+
+                  <line
+                    x1="96"
+                    y1="98"
+                    x2="140"
+                    y2="70"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="96"
+                    y1="114"
+                    x2="140"
+                    y2="160"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="156"
+                    cy="62"
+                    r="16"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="156"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    c
+                  </text>
+                  <line
+                    x1="172"
+                    y1="62"
+                    x2="208"
+                    y2="62"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="224"
+                    cy="62"
+                    r="16"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="224"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    a
+                  </text>
+
+                  <line
+                    x1="240"
+                    y1="54"
+                    x2="276"
+                    y2="34"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="240"
+                    y1="70"
+                    x2="276"
+                    y2="90"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="292"
+                    cy="28"
+                    r="16"
+                    fill="var(--val)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="292"
+                    y="33"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    r
+                  </text>
+                  <text
+                    x="322"
+                    y="33"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    "car"
+                  </text>
+
+                  <circle
+                    cx="292"
+                    cy="96"
+                    r="16"
+                    fill="var(--val)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="292"
+                    y="101"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    t
+                  </text>
+                  <text
+                    x="322"
+                    y="101"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    "cat"
+                  </text>
+
+                  <circle
+                    cx="156"
+                    cy="168"
+                    r="16"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="156"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    d
+                  </text>
+                  <line
+                    x1="172"
+                    y1="168"
+                    x2="208"
+                    y2="168"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="224"
+                    cy="168"
+                    r="16"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="224"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    o
+                  </text>
+                  <line
+                    x1="240"
+                    y1="168"
+                    x2="276"
+                    y2="168"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="292"
+                    cy="168"
+                    r="16"
+                    fill="var(--key)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="292"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    g
+                  </text>
+                  <text
+                    x="322"
+                    y="173"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "dog"
+                  </text>
+
+                  <text x="420" y="40" font-size="10.5" fill="var(--ink-soft)">
+                    filled = end of a word
+                  </text>
+                  <text
+                    x="420"
+                    y="66"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    lookup is O(m)
+                  </text>
+                  <text x="420" y="82" font-size="10" fill="var(--ink-faint)">
+                    m = key length, NOT the
+                  </text>
+                  <text x="420" y="96" font-size="10" fill="var(--ink-faint)">
+                    number of keys stored
+                  </text>
+                  <text
+                    x="420"
+                    y="124"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    "ca" → every word
+                  </text>
+                  <text
+                    x="420"
+                    y="140"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    beneath that node
+                  </text>
+                  <text x="420" y="156" font-size="10" fill="var(--ink-faint)">
+                    autocomplete, in one walk
+                  </text>
+                  <text x="420" y="184" font-size="10.5" fill="var(--hot)">
+                    not in the JDK — write it
+                  </text>
+                  <text x="420" y="200" font-size="10.5" fill="var(--hot)">
+                    or use Apache Commons
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Prefix search is the whole point.</b> A
+              <code>TreeMap</code> can do <code>subMap("ca", "cb")</code> for
+              the same result in O(log n); a trie does it in O(m) and shares
+              storage between common prefixes. For a dictionary of similar
+              words, the trie wins on both.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ BTREE ============ -->
+        <section id="btree">
+          <h2>B-trees</h2>
+          <p class="lede">
+            The tree your database uses. Same idea as a BST, reshaped around the
+            fact that reading from disk has a fixed minimum cost.
+          </p>
+
+          <p>
+            A binary node holds one key and costs one read. If a read costs 8KB
+            regardless, fetching one key wastes the other 8,000 bytes. A B-tree
+            node instead holds <em>hundreds</em> of keys — one page worth — so
+            the fanout is enormous and the tree is extremely shallow.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Binary tree</th>
+                  <th>B-tree (fanout ~200)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Keys per node</td>
+                  <td>1</td>
+                  <td>Hundreds</td>
+                </tr>
+                <tr>
+                  <td>Height for 1M keys</td>
+                  <td>~20</td>
+                  <td class="y">~3</td>
+                </tr>
+                <tr>
+                  <td>Disk reads per lookup</td>
+                  <td>~20</td>
+                  <td class="y">~3</td>
+                </tr>
+                <tr>
+                  <td>Built for</td>
+                  <td>Memory</td>
+                  <td>Block storage</td>
+                </tr>
+                <tr>
+                  <td>Used by</td>
+                  <td>TreeMap</td>
+                  <td>Postgres, MySQL, filesystems</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            In a <strong>B+ tree</strong> — the variant most databases actually
+            use — all values live in the leaves, and the leaves are linked. That
+            gives you a shallow tree for point lookups <em>and</em> a linked
+            list for range scans, which is why
+            <code>WHERE id BETWEEN 100 AND 200</code> is fast. There's no B-tree
+            in the JDK, because the JDK's collections live in memory where the
+            fanout argument doesn't apply.
+          </p>
+        </section>
+
+        <!-- ============ RECURSION ============ -->
+        <section id="recursion">
+          <h2>Recursion and depth</h2>
+          <p class="lede">
+            Tree code is naturally recursive, and recursion depth is bounded by
+            tree height — which is fine until the tree isn't balanced.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Balanced: 1,000,000 nodes → depth ~20. Never a problem.</span>
+<span class="c">// Degenerate: 1,000,000 nodes → depth 1,000,000 → StackOverflowError.</span>
+
+<span class="c">// A TreeMap is safe by construction; your own BST is not.</span>
+<span class="c">// If the input order is untrusted, iterate instead of recursing:</span>
+<span class="t">Deque</span>&lt;<span class="t">Node</span>&gt; stack = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+stack.push(root);
+<span class="k">while</span> (!stack.isEmpty()) {
+    <span class="t">Node</span> n = stack.pop();
+    visit(n);
+    <span class="k">if</span> (n.right != <span class="k">null</span>) stack.push(n.right);
+    <span class="k">if</span> (n.left  != <span class="k">null</span>) stack.push(n.left);   <span class="c">// pushed last → popped first</span>
+}</pre>
+          </div>
+
+          <p>
+            Java has no tail-call optimisation, so a recursive traversal always
+            consumes real stack frames. The heap-allocated
+            <code>ArrayDeque</code> above is bounded by available memory rather
+            than by <code>-Xss</code>, which is a much larger budget. See
+            <a href="04-inside-stacks-and-queues.html"
+              ><strong>Inside Stacks and Queues</strong></a
+            >
+            for why.
+          </p>
+        </section>
+
+        <!-- ============ COMPLEXITY ============ -->
+        <section id="complexity">
+          <h2>Complexity</h2>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Structure</th>
+                  <th class="mono">search</th>
+                  <th class="mono">insert</th>
+                  <th class="mono">delete</th>
+                  <th>Ordered?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">BST (balanced)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">BST (degenerate)</td>
+                  <td class="mono n">O(n)</td>
+                  <td class="mono n">O(n)</td>
+                  <td class="mono n">O(n)</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">TreeMap / TreeSet</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">HashMap</td>
+                  <td class="mono y">O(1)*</td>
+                  <td class="mono y">O(1)*</td>
+                  <td class="mono y">O(1)*</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td class="name">Binary heap</td>
+                  <td class="mono n">O(n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n) min only</td>
+                  <td class="mid">min only</td>
+                </tr>
+                <tr>
+                  <td class="name">Trie</td>
+                  <td class="mono">O(m)</td>
+                  <td class="mono">O(m)</td>
+                  <td class="mono">O(m)</td>
+                  <td class="y">by prefix</td>
+                </tr>
+                <tr>
+                  <td class="name">B-tree</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="y">yes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size: 15px; color: var(--ink-faint)">
+            * average with a decent <code>hashCode()</code>; m = key length.
+            Traversal is O(n) everywhere — you're visiting every node.
+          </p>
+
+          <h4>Choosing</h4>
+          <ul class="pick">
+            <li>
+              <span class="want">Lookup by exact key, order irrelevant</span
+              ><span class="use">HashMap</span>
+            </li>
+            <li>
+              <span class="want">Iterate in sorted order</span
+              ><span class="use">TreeMap</span>
+            </li>
+            <li>
+              <span class="want">Nearest key above or below</span
+              ><span class="use">NavigableMap</span>
+            </li>
+            <li>
+              <span class="want">Everything between two keys</span
+              ><span class="use">subMap</span>
+            </li>
+            <li>
+              <span class="want">Only ever the smallest item</span
+              ><span class="use">PriorityQueue</span>
+            </li>
+            <li>
+              <span class="want">Autocomplete on a prefix</span
+              ><span class="use">trie</span>
+            </li>
+            <li>
+              <span class="want">Sorted data on disk</span
+              ><span class="use">B+ tree (your DB)</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Validating a BST by checking only the children</h3>
+          <p>
+            Comparing each node against its immediate children passes trees that
+            are badly wrong — a node deep in the left subtree can exceed the
+            root while still being smaller than its parent. Pass a permitted
+            range down the recursion instead.
+          </p>
+
+          <h3>Building your own BST from sorted input</h3>
+          <p>
+            It degenerates into a linked list and every operation becomes O(n).
+            Either use <code>TreeMap</code>, which rebalances, or shuffle before
+            inserting. The failure is silent: correct results, catastrophic
+            performance, and only at scale.
+          </p>
+
+          <h3>A comparator that isn't total</h3>
+          <p>
+            Comparing on one field means every entry sharing that field
+            collapses into one. A <code>TreeSet</code> ordered by last name
+            holds exactly one Smith. Always <code>thenComparing</code> down to
+            something unique.
+          </p>
+
+          <h3>Expecting <code>PriorityQueue</code> to be sorted</h3>
+          <p>
+            It's heap-ordered, not sorted — only <code>peek</code> and
+            <code>poll</code> respect the ordering, and the iterator doesn't.
+            Covered in detail in
+            <a href="04-inside-stacks-and-queues.html"
+              >Inside Stacks and Queues</a
+            >.
+          </p>
+
+          <h3>Mutating a key that's already in a tree</h3>
+          <p>
+            Its position was fixed by comparisons at insert time. Change what
+            the comparator reads and the entry becomes unreachable — present in
+            <code>size()</code>, invisible to <code>get()</code>.
+          </p>
+
+          <h3>Recursing over an untrusted tree</h3>
+          <p>
+            Depth equals height. A tree built from adversarial or sorted input
+            can be a million deep, and <code>StackOverflowError</code> is not
+            something you can meaningfully catch. Iterate with an explicit
+            <code>Deque</code> when the shape isn't yours to guarantee.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              A tree buys you order, and balance is what keeps that affordable.
+              In-order traversal of a BST is sorted output — that one fact
+              explains <code>TreeMap</code>. Reach for <code>HashMap</code> when
+              you only need lookup, <code>TreeMap</code> the moment you need
+              "nearest", "between", or "in order", and remember that anything
+              you build yourself has no balancing unless you write it.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

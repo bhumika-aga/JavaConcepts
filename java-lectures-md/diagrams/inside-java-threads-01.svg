@@ -1,0 +1,255 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="290"
+                viewBox="0 0 700 290"
+                role="img"
+                aria-label="Three threads each with a private stack, all reading and writing one shared heap"><style>svg{--bg:#F3F5F1; --surface:#FBFCFA; --surface-2:#E9EDE6; --ink:#15191B; --ink-soft:#59635F; --ink-faint:#808A85; --rule:#D6DCD3; --rule-strong:#B9C2B5; --key:#A85B00; --key-bg:#F6E8D5; --val:#0B6E75; --val-bg:#D8ECEC; --hot:#B33A2B; --hot-bg:#F7E2DE; --tree:#5E4B8B; --tree-bg:#E7E2F2; --good:#2F6B43;}@media(prefers-color-scheme:dark){svg{--bg:#13181A; --surface:#1A2023; --surface-2:#222A2D; --ink:#E9ECE8; --ink-soft:#A3ADA8; --ink-faint:#7C8782; --rule:#2B3336; --rule-strong:#3D4749; --key:#E5A75B; --key-bg:#3A2C17; --val:#4FC7D2; --val-bg:#123034; --hot:#E87862; --hot-bg:#3B211C; --tree:#AC9BDB; --tree-bg:#2A2440; --good:#6FBF8B;}}</style>
+                <defs>
+                  <marker
+                    id="a1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto">
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="IBM Plex Mono, monospace" font-size="12">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    PRIVATE — one per thread, nobody else can reach it
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="112"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--val)">
+                    Thread 1 stack
+                  </text>
+                  <text
+                    x="112"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)">
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="112"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)">
+                    int i = 0
+                  </text>
+
+                  <rect
+                    x="252"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--tree)">
+                    Thread 2 stack
+                  </text>
+                  <text
+                    x="350"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)">
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="350"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)">
+                    int i = 7
+                  </text>
+
+                  <rect
+                    x="490"
+                    y="30"
+                    width="196"
+                    height="92"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="588"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="600"
+                    fill="var(--key)">
+                    Thread 3 stack
+                  </text>
+                  <text
+                    x="588"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)">
+                    locals, frames, PC
+                  </text>
+                  <text
+                    x="588"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)">
+                    int i = 2
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="112"
+                      y1="124"
+                      x2="112"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                    <line
+                      x1="350"
+                      y1="124"
+                      x2="350"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                    <line
+                      x1="588"
+                      y1="124"
+                      x2="588"
+                      y2="176"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#a1)"
+                    />
+                  </g>
+                  <text
+                    x="124"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)">
+                    read / write
+                  </text>
+                  <text
+                    x="362"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)">
+                    read / write
+                  </text>
+                  <text
+                    x="600"
+                    y="148"
+                    font-size="10.5"
+                    fill="var(--ink-faint)">
+                    read / write
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="180"
+                    width="672"
+                    height="86"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="600"
+                    fill="var(--ink)">
+                    THE SHARED HEAP — every object, one copy, all threads
+                  </text>
+                  <rect
+                    x="150"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="210"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)">
+                    counter = 41
+                  </text>
+                  <rect
+                    x="290"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="350"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)">
+                    List items
+                  </text>
+                  <rect
+                    x="430"
+                    y="220"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="490"
+                    y="240"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)">
+                    cache map
+                  </text>
+                </g>
+              </svg>

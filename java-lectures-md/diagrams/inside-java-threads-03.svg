@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="268"
+                viewBox="0 0 700 268"
+                role="img"
+                aria-label="Two thread timelines interleaving a read-modify-write on a counter, producing 1 instead of 2"><style>svg{--bg:#F3F5F1; --surface:#FBFCFA; --surface-2:#E9EDE6; --ink:#15191B; --ink-soft:#59635F; --ink-faint:#808A85; --rule:#D6DCD3; --rule-strong:#B9C2B5; --key:#A85B00; --key-bg:#F6E8D5; --val:#0B6E75; --val-bg:#D8ECEC; --hot:#B33A2B; --hot-bg:#F7E2DE; --tree:#5E4B8B; --tree-bg:#E7E2F2; --good:#2F6B43;}@media(prefers-color-scheme:dark){svg{--bg:#13181A; --surface:#1A2023; --surface-2:#222A2D; --ink:#E9ECE8; --ink-soft:#A3ADA8; --ink-faint:#7C8782; --rule:#2B3336; --rule-strong:#3D4749; --key:#E5A75B; --key-bg:#3A2C17; --val:#4FC7D2; --val-bg:#123034; --hot:#E87862; --hot-bg:#3B211C; --tree:#AC9BDB; --tree-bg:#2A2440; --good:#6FBF8B;}}</style>
+                <g font-family="IBM Plex Mono, monospace" font-size="11.5">
+                  <text x="12" y="16" font-size="10.5" fill="var(--ink-faint)">
+                    time →
+                  </text>
+                  <line
+                    x1="12"
+                    y1="24"
+                    x2="688"
+                    y2="24"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <!-- lane 1 -->
+                  <text
+                    x="12"
+                    y="62"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--val)">
+                    Thread 1
+                  </text>
+                  <line
+                    x1="92"
+                    y1="58"
+                    x2="688"
+                    y2="58"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="100"
+                    y="42"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="156"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)">
+                    read → 0
+                  </text>
+                  <rect
+                    x="360"
+                    y="42"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="416"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)">
+                    add → 1
+                  </text>
+                  <rect
+                    x="500"
+                    y="42"
+                    width="120"
+                    height="32"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="560"
+                    y="63"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)">
+                    write 1
+                  </text>
+
+                  <!-- lane 2 -->
+                  <text
+                    x="12"
+                    y="126"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--tree)">
+                    Thread 2
+                  </text>
+                  <line
+                    x1="92"
+                    y1="122"
+                    x2="688"
+                    y2="122"
+                    stroke="var(--tree)"
+                    stroke-width="1.5"
+                    opacity=".35"
+                  />
+                  <rect
+                    x="230"
+                    y="106"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="286"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)">
+                    read → 0
+                  </text>
+                  <rect
+                    x="360"
+                    y="106"
+                    width="112"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="416"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)">
+                    add → 1
+                  </text>
+                  <rect
+                    x="628"
+                    y="106"
+                    width="60"
+                    height="32"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="658"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)">
+                    write 1
+                  </text>
+
+                  <!-- the shared value -->
+                  <text
+                    x="12"
+                    y="190"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--ink)">
+                    count
+                  </text>
+                  <line
+                    x1="92"
+                    y1="186"
+                    x2="688"
+                    y2="186"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="120"
+                    y="190"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)">
+                    0
+                  </text>
+                  <text
+                    x="300"
+                    y="190"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)">
+                    0
+                  </text>
+                  <text
+                    x="560"
+                    y="176"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--ink-soft)">
+                    1
+                  </text>
+                  <text
+                    x="658"
+                    y="176"
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--hot)">
+                    1
+                  </text>
+
+                  <rect
+                    x="500"
+                    y="206"
+                    width="188"
+                    height="46"
+                    rx="6"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="594"
+                    y="224"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="600"
+                    fill="var(--hot)">
+                    expected 2, got 1
+                  </text>
+                  <text
+                    x="594"
+                    y="242"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)">
+                    one increment vanished
+                  </text>
+
+                  <text
+                    x="12"
+                    y="252"
+                    font-size="10.5"
+                    fill="var(--ink-faint)">
+                    Both threads read 0 before either wrote. The second write
+                    overwrites the first — the lost update.
+                  </text>
+                </g>
+              </svg>

@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="230"
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="An extends wildcard permits reads and blocks writes, while a super wildcard permits writes and degrades reads to Object"><style>svg{--bg:#F3F5F1; --surface:#FBFCFA; --surface-2:#E9EDE6; --ink:#15191B; --ink-soft:#59635F; --ink-faint:#808A85; --rule:#D6DCD3; --rule-strong:#B9C2B5; --key:#A85B00; --key-bg:#F6E8D5; --val:#0B6E75; --val-bg:#D8ECEC; --hot:#B33A2B; --hot-bg:#F7E2DE; --tree:#5E4B8B; --tree-bg:#E7E2F2; --good:#2F6B43;}@media(prefers-color-scheme:dark){svg{--bg:#13181A; --surface:#1A2023; --surface-2:#222A2D; --ink:#E9ECE8; --ink-soft:#A3ADA8; --ink-faint:#7C8782; --rule:#2B3336; --rule-strong:#3D4749; --key:#E5A75B; --key-bg:#3A2C17; --val:#4FC7D2; --val-bg:#123034; --hot:#E87862; --hot-bg:#3B211C; --tree:#AC9BDB; --tree-bg:#2A2440; --good:#6FBF8B;}}</style>
+                <defs>
+                  <marker
+                    id="g4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto">
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <rect
+                    x="30"
+                    y="60"
+                    width="196"
+                    height="70"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="128"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)">
+                    List&lt;? extends Fruit&gt;
+                  </text>
+                  <text
+                    x="128"
+                    y="104"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)">
+                    "some ONE kind of fruit —
+                  </text>
+                  <text
+                    x="128"
+                    y="119"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)">
+                    I don't know which"
+                  </text>
+
+                  <g color="var(--good)">
+                    <line
+                      x1="234"
+                      y1="80"
+                      x2="300"
+                      y2="80"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="84"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--good)">
+                    get() → Fruit ✓
+                  </text>
+
+                  <g color="var(--hot)">
+                    <line
+                      x1="300"
+                      y1="112"
+                      x2="238"
+                      y2="112"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="116"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)">
+                    add(…) ✗ — which fruit?
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="152"
+                    x2="688"
+                    y2="152"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <rect
+                    x="30"
+                    y="166"
+                    width="196"
+                    height="52"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="128"
+                    y="188"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)">
+                    List&lt;? super Apple&gt;
+                  </text>
+                  <text
+                    x="128"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--tree)">
+                    "definitely accepts apples"
+                  </text>
+
+                  <g color="var(--good)">
+                    <line
+                      x1="300"
+                      y1="182"
+                      x2="238"
+                      y2="182"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="186"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--good)">
+                    add(apple) ✓
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="234"
+                      y1="208"
+                      x2="300"
+                      y2="208"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="212"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)">
+                    get() → Object only
+                  </text>
+
+                  <text x="12" y="28" font-size="11" fill="var(--ink-faint)">
+                    Each wildcard opens one direction and closes the other.
+                    There is no form that opens both.
+                  </text>
+                </g>
+              </svg>

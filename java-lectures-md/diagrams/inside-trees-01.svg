@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="250" viewBox="0 0 700 250" role="img" aria-label="A labelled tree showing root, internal nodes, leaves, an edge, a subtree, and the height and depth measurements"><style>svg{--bg:#F3F5F1; --surface:#FBFCFA; --surface-2:#E9EDE6; --ink:#15191B; --ink-soft:#59635F; --ink-faint:#808A85; --rule:#D6DCD3; --rule-strong:#B9C2B5; --key:#A85B00; --key-bg:#F6E8D5; --val:#0B6E75; --val-bg:#D8ECEC; --hot:#B33A2B; --hot-bg:#F7E2DE; --tree:#5E4B8B; --tree-bg:#E7E2F2; --good:#2F6B43;}@media(prefers-color-scheme:dark){svg{--bg:#13181A; --surface:#1A2023; --surface-2:#222A2D; --ink:#E9ECE8; --ink-soft:#A3ADA8; --ink-faint:#7C8782; --rule:#2B3336; --rule-strong:#3D4749; --key:#E5A75B; --key-bg:#3A2C17; --val:#4FC7D2; --val-bg:#123034; --hot:#E87862; --hot-bg:#3B211C; --tree:#AC9BDB; --tree-bg:#2A2440; --good:#6FBF8B;}}</style>
+        <g font-family="JetBrains Mono, monospace" font-size="11">
+          <line x1="300" y1="50" x2="190" y2="106" stroke="var(--rule-strong)" stroke-width="2"/>
+          <line x1="300" y1="50" x2="410" y2="106" stroke="var(--rule-strong)" stroke-width="2"/>
+          <line x1="190" y1="134" x2="130" y2="182" stroke="var(--rule-strong)" stroke-width="2"/>
+          <line x1="190" y1="134" x2="250" y2="182" stroke="var(--rule-strong)" stroke-width="2"/>
+          <line x1="410" y1="134" x2="470" y2="182" stroke="var(--rule-strong)" stroke-width="2"/>
+
+          <circle cx="300" cy="44" r="22" fill="var(--key-bg)" stroke="var(--key)" stroke-width="3"/>
+          <text x="300" y="50" text-anchor="middle" font-size="13" font-weight="700" fill="var(--key)">A</text>
+          <text x="300" y="14" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--key)">root — the only parentless node</text>
+
+          <circle cx="190" cy="120" r="21" fill="var(--val-bg)" stroke="var(--val)" stroke-width="2.5"/>
+          <text x="190" y="126" text-anchor="middle" font-size="12" font-weight="700" fill="var(--val)">B</text>
+          <circle cx="410" cy="120" r="21" fill="var(--val-bg)" stroke="var(--val)" stroke-width="2.5"/>
+          <text x="410" y="126" text-anchor="middle" font-size="12" font-weight="700" fill="var(--val)">C</text>
+
+          <circle cx="130" cy="196" r="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="130" y="202" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">D</text>
+          <circle cx="250" cy="196" r="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="250" y="202" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">E</text>
+          <circle cx="470" cy="196" r="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="2.5"/>
+          <text x="470" y="202" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">F</text>
+
+          <text x="190" y="234" text-anchor="middle" font-size="10.5" fill="var(--ink-soft)">leaves — no children</text>
+
+          <text x="238" y="86" font-size="10" fill="var(--ink-faint)">edge</text>
+
+          <text x="540" y="44" font-size="10.5" font-weight="700" fill="var(--key)">height = 2</text>
+          <text x="540" y="60" font-size="10" fill="var(--ink-faint)">longest root→leaf</text>
+          <text x="540" y="88" font-size="10.5" font-weight="700" fill="var(--val)">depth(B) = 1</text>
+          <text x="540" y="104" font-size="10" fill="var(--ink-faint)">edges from the root</text>
+          <text x="540" y="132" font-size="10.5" font-weight="700" fill="var(--ink-soft)">B's subtree</text>
+          <text x="540" y="148" font-size="10" fill="var(--ink-faint)">B, D and E — itself a tree</text>
+          <text x="540" y="176" font-size="10.5" font-weight="700" fill="var(--ink-soft)">binary = ≤ 2 children</text>
+          <text x="540" y="192" font-size="10" fill="var(--ink-faint)">n-ary allows more</text>
+        </g>
+      </svg>

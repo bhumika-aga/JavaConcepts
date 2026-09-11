@@ -1,0 +1,2290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Spring Boot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The idea</div>
+          <a href="#what">What Boot actually adds</a>
+          <a href="#starters">Starters</a>
+          <div class="grp">Auto-configuration</div>
+          <a href="#autoconfig">How it works</a>
+          <a href="#conditions">The conditions</a>
+          <a href="#override">Overriding it</a>
+          <div class="grp">Configuration</div>
+          <a href="#props">Property sources</a>
+          <a href="#binding">Binding and profiles</a>
+          <div class="grp">Runtime</div>
+          <a href="#startup">The startup sequence</a>
+          <a href="#jar">The fat jar</a>
+          <a href="#server">Embedded servers</a>
+          <div class="grp">Operations</div>
+          <a href="#actuator">Actuator</a>
+          <a href="#logging">Logging and DevTools</a>
+          <a href="#native">AOT and native</a>
+          <div class="grp">Reference</div>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            spring boot &middot; auto-configuration to fat jar
+          </p>
+          <h1>Inside Spring Boot</h1>
+          <p class="dek">
+            Spring gives you a container. Boot gives you
+            <em>everything around it</em> — sensible defaults that retreat the
+            moment you disagree, one file you can actually run, and the
+            endpoints ops will ask for. None of it is magic; all of it is
+            conditions and ordering.
+          </p>
+        </header>
+
+        <!-- ============ WHAT ============ -->
+        <section id="what">
+          <h2>What Boot actually adds</h2>
+          <p class="lede">
+            Boot is not a fork of Spring or a replacement for it. It's four
+            additions on top, and they're separable — you could adopt any one
+            without the others.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Addition</th>
+                  <th>Replaces</th>
+                  <th>The point</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Auto-configuration</td>
+                  <td>Pages of <code>@Bean</code> boilerplate</td>
+                  <td>
+                    Configure what's on the classpath, unless you already did
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">Starters</td>
+                  <td>Hand-picking compatible versions</td>
+                  <td>One dependency pulls a tested, coherent set</td>
+                </tr>
+                <tr>
+                  <td class="name">Executable jar</td>
+                  <td>WAR files and an installed server</td>
+                  <td><code>java -jar app.jar</code> and it runs</td>
+                </tr>
+                <tr>
+                  <td class="name">Actuator</td>
+                  <td>Writing your own health endpoint</td>
+                  <td>Health, metrics and diagnostics as standard</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note">
+            <span class="tag">This page assumes the container</span>
+            <p>
+              Beans, dependency injection, scopes, the lifecycle and proxy-based
+              annotations belong to Spring itself, and are covered in
+              <a href="07-inside-spring.html"><strong>Inside Spring</strong></a
+              >. Everything here sits on top of that — if
+              <code>@Transactional</code> mysteriously does nothing, the answer
+              is in that lecture, not this one.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ STARTERS ============ -->
+        <section id="starters">
+          <h2>Starters</h2>
+          <p class="lede">
+            A starter is a dependency with no code in it. It exists purely to
+            drag in a curated set of other dependencies at versions known to
+            work together.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">&lt;!-- One line. Roughly thirty jars, all version-matched. --&gt;</span>
+&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+&lt;/dependency&gt;
+
+<span class="c">// what it actually brings:</span>
+<span class="c">//   spring-boot-starter        core + auto-config + logging</span>
+<span class="c">//   spring-webmvc              the MVC framework</span>
+<span class="c">//   spring-boot-starter-json   Jackson</span>
+<span class="c">//   spring-boot-starter-tomcat embedded server</span>
+
+<span class="c">// Notice there is no &lt;version&gt;. The parent manages it.</span>
+&lt;parent&gt;
+  &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+  &lt;version&gt;3.3.0&lt;/version&gt;
+&lt;/parent&gt;</pre>
+          </div>
+
+          <p>
+            The parent does two things: it imports the
+            <code>spring-boot-dependencies</code> BOM, which pins versions for
+            hundreds of libraries, and it preconfigures plugins. If you already
+            have a corporate parent POM, import the BOM directly instead — you
+            get the version management without the plugin opinions.
+          </p>
+
+          <div class="note">
+            <span class="tag">Swapping a managed version</span>
+            <p>
+              Override a BOM-managed version with a property, not a
+              <code>&lt;version&gt;</code> tag:
+              <code
+                >&lt;properties&gt;&lt;jackson-bom.version&gt;2.17.1&lt;/…&gt;</code
+              >. Setting the version on the dependency works but silently
+              diverges from the tested set, which is exactly the problem
+              starters exist to solve.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ AUTOCONFIG ============ -->
+        <section id="autoconfig">
+          <h2>How auto-configuration works</h2>
+          <p class="lede">
+            At startup Boot reads a list of candidate configuration classes
+            shipped inside the jars on your classpath, then evaluates each one's
+            conditions. Most are discarded.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="Candidate auto-configurations are loaded from a file in each jar, filtered by conditions, and only the matching ones register beans"
+              >
+                <defs>
+                  <marker
+                    id="b1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="40"
+                    width="150"
+                    height="64"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="87"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    each jar ships
+                  </text>
+                  <text
+                    x="87"
+                    y="78"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    AutoConfiguration
+                  </text>
+                  <text
+                    x="87"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    .imports
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="166"
+                      y1="72"
+                      x2="196"
+                      y2="72"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+
+                  <rect
+                    x="200"
+                    y="40"
+                    width="150"
+                    height="64"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="275"
+                    y="66"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    ~150 candidates
+                  </text>
+                  <text
+                    x="275"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--key)"
+                  >
+                    names only, not loaded yet
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="354"
+                      y1="72"
+                      x2="384"
+                      y2="72"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+
+                  <rect
+                    x="388"
+                    y="34"
+                    width="150"
+                    height="76"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="463"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    evaluate
+                  </text>
+                  <text
+                    x="463"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    @Conditional
+                  </text>
+                  <text
+                    x="463"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    cheap checks first
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="542"
+                      y1="58"
+                      x2="572"
+                      y2="46"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+                  <rect
+                    x="576"
+                    y="24"
+                    width="110"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="631"
+                    y="42"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    matched
+                  </text>
+                  <text
+                    x="631"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    beans registered
+                  </text>
+
+                  <g color="var(--ink-faint)">
+                    <line
+                      x1="542"
+                      y1="86"
+                      x2="572"
+                      y2="98"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#b1)"
+                    />
+                  </g>
+                  <rect
+                    x="576"
+                    y="80"
+                    width="110"
+                    height="42"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="631"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    skipped
+                  </text>
+                  <text
+                    x="631"
+                    y="113"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    costs nothing
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="140"
+                    width="674"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Your own beans are registered BEFORE auto-configuration
+                    runs.
+                  </text>
+                  <text
+                    x="350"
+                    y="174"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    That ordering is the entire reason @ConditionalOnMissingBean
+                    works.
+                  </text>
+
+                  <text x="12" y="208" font-size="10.5" fill="var(--ink-soft)">
+                    Boot 2.7+ and 3.x read
+                    META-INF/spring/…AutoConfiguration.imports.
+                  </text>
+                  <text x="12" y="226" font-size="10.5" fill="var(--ink-soft)">
+                    Older versions used spring.factories — you will still meet
+                    it in third-party libraries.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Candidates are names, not classes.</b> Boot deliberately checks
+              the cheap conditions before loading anything, so 150 candidates
+              costs milliseconds rather than 150 class loads.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// A real auto-configuration, simplified</span>
+<span class="k">@AutoConfiguration</span>(after = <span class="t">DataSourceAutoConfiguration</span>.<span class="k">class</span>)
+<span class="k">@ConditionalOnClass</span>(<span class="t">JdbcTemplate</span>.<span class="k">class</span>)          <span class="c">// is the library present?</span>
+<span class="k">@ConditionalOnSingleCandidate</span>(<span class="t">DataSource</span>.<span class="k">class</span>)   <span class="c">// exactly one DataSource?</span>
+<span class="k">public class</span> <span class="t">JdbcTemplateAutoConfiguration</span> {
+
+    <span class="k">@Bean</span>
+    <span class="k">@ConditionalOnMissingBean</span>(<span class="t">JdbcOperations</span>.<span class="k">class</span>)   <span class="c">// did YOU define one?</span>
+    <span class="t">JdbcTemplate</span> jdbcTemplate(<span class="t">DataSource</span> ds) { <span class="k">return new</span> <span class="t">JdbcTemplate</span>(ds); }
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ CONDITIONS ============ -->
+        <section id="conditions">
+          <h2>The conditions</h2>
+          <p class="lede">
+            Everything Boot decides comes from this family of annotations.
+            They're available to you too, and they're the correct way to write a
+            library that plays nicely.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Condition</th>
+                  <th>Matches when</th>
+                  <th>Typical use</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">@ConditionalOnClass</td>
+                  <td>A class is on the classpath</td>
+                  <td>"They added the Redis driver"</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnMissingBean</td>
+                  <td>Nobody defined that bean</td>
+                  <td>Back off if the user configured it</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnBean</td>
+                  <td>Some other bean exists</td>
+                  <td>Only configure if there's a DataSource</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnProperty</td>
+                  <td>A property has a value</td>
+                  <td>Feature flags</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnWebApplication</td>
+                  <td>It's a servlet or reactive app</td>
+                  <td>Web-only beans</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnResource</td>
+                  <td>A file exists</td>
+                  <td>Legacy config files</td>
+                </tr>
+                <tr>
+                  <td class="name">@ConditionalOnExpression</td>
+                  <td>A SpEL expression is true</td>
+                  <td>Anything more complex</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >@ConditionalOnMissingBean is unreliable in your own config</span
+            >
+            <p>
+              It works in auto-configuration
+              <em>because auto-configuration runs last</em>. Put it in your own
+              <code>@Configuration</code> class and the result depends on the
+              order two of your classes happen to be processed in — which is not
+              something you control. Use it for library code and
+              auto-configuration; use <code>@Profile</code> or
+              <code>@ConditionalOnProperty</code> for your own application.
+            </p>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Seeing what actually happened — the single most useful Boot command</span>
+java -jar app.jar --debug
+
+<span class="c">// prints a report:</span>
+<span class="c">//   Positive matches:  DataSourceAutoConfiguration matched because …</span>
+<span class="c">//   Negative matches:  RedisAutoConfiguration did not match because</span>
+<span class="c">//                      @ConditionalOnClass did not find RedisOperations</span>
+
+<span class="c">// Or at runtime, if actuator is on:   GET /actuator/conditions</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ OVERRIDE ============ -->
+        <section id="override">
+          <h2>Overriding it</h2>
+          <p class="lede">
+            Three levers, in the order you should reach for them.
+          </p>
+
+          <ol class="path">
+            <li>
+              <b>Set a property</b
+              ><span
+                >Most auto-configuration is tunable without code. Check the
+                reference before writing a bean.</span
+              >
+            </li>
+            <li>
+              <b>Define the bean yourself</b
+              ><span
+                ><code>@ConditionalOnMissingBean</code> means yours simply wins.
+                This is the intended extension point.</span
+              >
+            </li>
+            <li>
+              <b>Exclude the auto-configuration</b
+              ><span
+                >A blunt instrument, and occasionally the right one — usually
+                when a starter arrived transitively.</span
+              >
+            </li>
+          </ol>
+
+          <div class="code">
+            <pre><span class="c">// 1 — a property</span>
+spring.jpa.hibernate.ddl-auto: validate
+
+<span class="c">// 2 — your bean wins, no annotation needed on your side</span>
+<span class="k">@Bean</span> <span class="t">ObjectMapper</span> objectMapper() { <span class="k">return new</span> <span class="t">ObjectMapper</span>().findAndRegisterModules(); }
+
+<span class="c">// 3 — exclude entirely</span>
+<span class="k">@SpringBootApplication</span>(exclude = <span class="t">DataSourceAutoConfiguration</span>.<span class="k">class</span>)
+<span class="c">// or:  spring.autoconfigure.exclude=org.springframework…DataSourceAutoConfiguration</span></pre>
+          </div>
+
+          <p>
+            Excluding <code>DataSourceAutoConfiguration</code> is the standard
+            fix for the classic startup failure where a library dragged in JDBC
+            and Boot now insists on a database URL you don't have.
+          </p>
+        </section>
+
+        <!-- ============ PROPS ============ -->
+        <section id="props">
+          <h2>Property sources</h2>
+          <p class="lede">
+            Boot merges configuration from many places into one view. When a
+            value isn't what you expected, it's nearly always because something
+            higher on this ladder overrode it.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 280"
+                role="img"
+                aria-label="A precedence ladder of configuration sources from command line arguments at the top down to defaults set in code at the bottom"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    HIGHEST — wins over everything below
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="28"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="26"
+                    y="47"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    command line --server.port=9000
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="60"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="79" font-size="11" fill="var(--key)">
+                    SPRING_APPLICATION_JSON
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="92"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="111" font-size="11" fill="var(--key)">
+                    system properties -Dserver.port=9000
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="124"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="143" font-size="11" fill="var(--key)">
+                    OS environment SERVER_PORT=9000
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="156"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="175" font-size="11" fill="var(--ink)">
+                    application-{profile}.yml outside the jar
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="188"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="207" font-size="11" fill="var(--ink)">
+                    application.yml outside the jar
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="220"
+                    width="500"
+                    height="28"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text x="26" y="239" font-size="11" fill="var(--val)">
+                    application.yml inside the jar
+                  </text>
+
+                  <text
+                    x="12"
+                    y="270"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    LOWEST — defaults set in code
+                  </text>
+
+                  <text x="526" y="47" font-size="10" fill="var(--ink-faint)">
+                    deploys
+                  </text>
+                  <text x="526" y="143" font-size="10" fill="var(--ink-faint)">
+                    containers,
+                  </text>
+                  <text x="526" y="157" font-size="10" fill="var(--ink-faint)">
+                    Kubernetes
+                  </text>
+                  <text x="526" y="239" font-size="10" fill="var(--ink-faint)">
+                    your default
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>This ladder explains most "but I set that!" moments.</b> An
+              environment variable set by your platform silently beats the value
+              you committed — which is the intended design, and confusing
+              exactly once.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c"># See the resolved value and where it came from:</span>
+GET /actuator/env/server.port
+
+<span class="c"># Import extra config explicitly (Boot 2.4+)</span>
+spring.config.import: optional:file:./local.yml, configtree:/run/secrets/</pre>
+          </div>
+        </section>
+
+        <!-- ============ BINDING ============ -->
+        <section id="binding">
+          <h2>Binding and profiles</h2>
+          <p class="lede">
+            Boot maps loosely-spelled property names onto typed objects. The
+            looseness is deliberate, because environment variables can't contain
+            dots.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// All four of these bind to the same property — "relaxed binding"</span>
+app.mail-server.host          <span class="c">// kebab-case — the canonical form</span>
+app.mailServer.host
+app.mail_server.host
+APP_MAILSERVER_HOST           <span class="c">// how you set it in Docker or Kubernetes</span>
+
+<span class="c">// Typed, immutable, validated — the modern shape</span>
+<span class="k">@ConfigurationProperties</span>(prefix = <span class="s">"app.mail-server"</span>)
+<span class="k">@Validated</span>
+<span class="k">record</span> <span class="t">MailProps</span>(<span class="k">@NotBlank</span> <span class="t">String</span> host, <span class="k">int</span> port, <span class="t">Duration</span> timeout) { }
+
+<span class="c">// enable with @ConfigurationPropertiesScan on the main class</span>
+
+<span class="c">// Durations and sizes parse from friendly strings</span>
+app.timeout: 30s        <span class="c">// → Duration</span>
+app.max-upload: 10MB    <span class="c">// → DataSize</span></pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">@Value does not do relaxed binding</span>
+            <p>
+              <code>@Value("${app.mailServer.host}")</code> will not pick up
+              <code>APP_MAILSERVER_HOST</code>; it looks for that exact key.
+              <code>@ConfigurationProperties</code> does the relaxed matching.
+              This is the usual reason a value works locally in
+              <code>application.yml</code> and is null in a container.
+            </p>
+          </div>
+
+          <h3>Profiles</h3>
+          <div class="code">
+            <pre><span class="c"># application.yml — shared defaults</span>
+<span class="c"># application-prod.yml — merged over the top when prod is active</span>
+
+<span class="k">@Profile</span>(<span class="s">"!prod"</span>)  <span class="k">@Bean</span> <span class="t">Mailer</span> fake() { … }
+
+<span class="c"># activate: --spring.profiles.active=prod   or  SPRING_PROFILES_ACTIVE=prod</span>
+<span class="c"># and inside a document, gate a whole block:</span>
+spring.config.activate.on-profile: prod</pre>
+          </div>
+
+          <p>
+            Profile-specific files <strong>supplement</strong> the base file
+            rather than replacing it — <code>application.yml</code> is always
+            loaded, then <code>application-prod.yml</code> layers on top. A key
+            absent from the profile file keeps its base value, which is usually
+            what you want and occasionally not.
+          </p>
+        </section>
+
+        <!-- ============ STARTUP ============ -->
+        <section id="startup">
+          <h2>The startup sequence</h2>
+          <p class="lede">
+            What <code>SpringApplication.run()</code> actually does, in order.
+            Worth knowing because the failure message tells you which step you
+            died in.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="The Spring Boot startup sequence from environment preparation through context refresh to runners and the ready event"
+              >
+                <defs>
+                  <marker
+                    id="b2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="10.5">
+                  <rect
+                    x="12"
+                    y="34"
+                    width="128"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="76"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    1 · environment
+                  </text>
+                  <text
+                    x="76"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    props + profiles
+                  </text>
+                  <line
+                    x1="144"
+                    y1="55"
+                    x2="168"
+                    y2="55"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="172"
+                    y="34"
+                    width="128"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="236"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    2 · banner + ctx
+                  </text>
+                  <text
+                    x="236"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    pick app type
+                  </text>
+                  <line
+                    x1="304"
+                    y1="55"
+                    x2="328"
+                    y2="55"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="332"
+                    y="34"
+                    width="140"
+                    height="42"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="402"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    3 · scan + autoconf
+                  </text>
+                  <text
+                    x="402"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--key)"
+                  >
+                    definitions only
+                  </text>
+                  <line
+                    x1="476"
+                    y1="55"
+                    x2="500"
+                    y2="55"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="504"
+                    y="34"
+                    width="182"
+                    height="42"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="595"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    4 · refresh()
+                  </text>
+                  <text
+                    x="595"
+                    y="67"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    build every singleton
+                  </text>
+
+                  <path
+                    d="M595 80 C595 100, 76 100, 76 114"
+                    fill="none"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="12"
+                    y="118"
+                    width="150"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="87"
+                    y="136"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    5 · start server
+                  </text>
+                  <text
+                    x="87"
+                    y="151"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    port opens here
+                  </text>
+                  <line
+                    x1="166"
+                    y1="139"
+                    x2="190"
+                    y2="139"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="194"
+                    y="118"
+                    width="150"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="269"
+                    y="136"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    6 · runners
+                  </text>
+                  <text
+                    x="269"
+                    y="151"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    CommandLineRunner
+                  </text>
+                  <line
+                    x1="348"
+                    y1="139"
+                    x2="372"
+                    y2="139"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#b2)"
+                  />
+
+                  <rect
+                    x="376"
+                    y="118"
+                    width="150"
+                    height="42"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="451"
+                    y="142"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    7 · ApplicationReady
+                  </text>
+
+                  <text x="12" y="192" font-size="10.5" fill="var(--ink-soft)">
+                    Fail in step 3 → a bean is missing or ambiguous. Fail in
+                    step 4 → a bean threw while being built.
+                  </text>
+                  <text x="12" y="210" font-size="10.5" fill="var(--ink-soft)">
+                    Boot's FailureAnalyzers turn the common ones into plain
+                    English — read the bottom of the trace first.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The port opens at step 5, before the runners.</b> If a
+              <code>CommandLineRunner</code> does slow warm-up work, traffic can
+              arrive before it finishes — use the readiness probe rather than
+              assuming startup order protects you.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ JAR ============ -->
+        <section id="jar">
+          <h2>The fat jar</h2>
+          <p class="lede">
+            One file containing your code, every dependency, and a small
+            launcher that knows how to read jars nested inside a jar — which the
+            JVM cannot do on its own.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="The internal layout of an executable Spring Boot jar showing the loader, application classes, nested dependency jars and the manifest entries"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="30"
+                    width="330"
+                    height="192"
+                    rx="9"
+                    fill="var(--surface)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="177"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    app.jar
+                  </text>
+
+                  <rect
+                    x="30"
+                    y="62"
+                    width="294"
+                    height="34"
+                    rx="5"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="44"
+                    y="83"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    org/springframework/boot/loader/
+                  </text>
+
+                  <rect
+                    x="30"
+                    y="102"
+                    width="294"
+                    height="34"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="44"
+                    y="123"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    BOOT-INF/classes/ ← your code
+                  </text>
+
+                  <rect
+                    x="30"
+                    y="142"
+                    width="294"
+                    height="34"
+                    rx="5"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="44"
+                    y="163"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    BOOT-INF/lib/ ← ~30 nested jars
+                  </text>
+
+                  <rect
+                    x="30"
+                    y="182"
+                    width="294"
+                    height="30"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text x="44" y="202" font-size="10.5" fill="var(--ink-soft)">
+                    META-INF/MANIFEST.MF
+                  </text>
+
+                  <rect
+                    x="360"
+                    y="60"
+                    width="326"
+                    height="76"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="374"
+                    y="82"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    Main-Class: …loader.launch.JarLauncher
+                  </text>
+                  <text
+                    x="374"
+                    y="100"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    Start-Class: com.example.App
+                  </text>
+                  <text x="374" y="122" font-size="10" fill="var(--ink-faint)">
+                    the JVM runs the launcher, not you
+                  </text>
+
+                  <rect
+                    x="360"
+                    y="148"
+                    width="326"
+                    height="74"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="374"
+                    y="170"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Why a launcher at all?
+                  </text>
+                  <text x="374" y="188" font-size="10" fill="var(--key)">
+                    A standard classloader cannot read a jar
+                  </text>
+                  <text x="374" y="203" font-size="10" fill="var(--key)">
+                    inside a jar. Nested jars are STORED
+                  </text>
+                  <text x="374" y="218" font-size="10" fill="var(--key)">
+                    uncompressed so they can be read in place.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b
+                >This is why
+                <code>java -cp app.jar com.example.App</code> fails.</b
+              >
+              Your class is under <code>BOOT-INF/classes</code>, and its
+              dependencies are jars the default classloader can't open. Always
+              <code>java -jar</code>.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c"># Layered jars — one Docker layer per rate of change, so a code-only</span>
+<span class="c"># change re-uploads megabytes instead of hundreds.</span>
+java -Djarmode=tools -jar app.jar extract --layers --launcher
+
+<span class="c"># Or skip the Dockerfile entirely — Boot builds an OCI image</span>
+mvn spring-boot:build-image</pre>
+          </div>
+        </section>
+
+        <!-- ============ SERVER ============ -->
+        <section id="server">
+          <h2>Embedded servers</h2>
+          <p class="lede">
+            The server is a dependency, not an installation. Swapping it is two
+            lines of build config.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">&lt;!-- Tomcat is the default. To use Undertow instead: --&gt;</span>
+&lt;exclusion&gt;spring-boot-starter-tomcat&lt;/exclusion&gt;
+&lt;dependency&gt;spring-boot-starter-undertow&lt;/dependency&gt;
+
+<span class="c"># Tuning that actually matters under load</span>
+server.port: 8080
+server.tomcat.threads.max: 200          <span class="c"># the real concurrency limit</span>
+server.tomcat.accept-count: 100         <span class="c"># queue depth once threads are busy</span>
+server.shutdown: graceful               <span class="c"># finish in-flight requests</span>
+spring.lifecycle.timeout-per-shutdown-phase: 30s</pre>
+          </div>
+
+          <p>
+            <code>server.shutdown=graceful</code> is worth setting in any
+            containerised deployment: on SIGTERM the server stops accepting new
+            connections but lets in-flight requests finish, instead of severing
+            them mid-response during a rolling deploy.
+          </p>
+        </section>
+
+        <!-- ============ ACTUATOR ============ -->
+        <section id="actuator">
+          <h2>Actuator</h2>
+          <p class="lede">
+            Production endpoints you'd otherwise write yourself. Only
+            <code>/health</code> is exposed over HTTP by default — deliberately,
+            because several of the others leak secrets.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Gives you</th>
+                  <th>Exposure</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">/health</td>
+                  <td>Up/down, plus per-component detail</td>
+                  <td class="y">on by default</td>
+                </tr>
+                <tr>
+                  <td class="name">/metrics</td>
+                  <td>Micrometer meters</td>
+                  <td>opt in</td>
+                </tr>
+                <tr>
+                  <td class="name">/prometheus</td>
+                  <td>Scrape format</td>
+                  <td>opt in</td>
+                </tr>
+                <tr>
+                  <td class="name">/conditions</td>
+                  <td>Why auto-config matched</td>
+                  <td>opt in</td>
+                </tr>
+                <tr>
+                  <td class="name">/beans</td>
+                  <td>Everything in the context</td>
+                  <td>opt in</td>
+                </tr>
+                <tr>
+                  <td class="name">/loggers</td>
+                  <td>Read <b>and change</b> log levels live</td>
+                  <td class="mid">opt in — write access</td>
+                </tr>
+                <tr>
+                  <td class="name">/env</td>
+                  <td>Every resolved property</td>
+                  <td class="n">leaks secrets</td>
+                </tr>
+                <tr>
+                  <td class="name">/heapdump</td>
+                  <td>A full heap dump</td>
+                  <td class="n">leaks everything</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre>management.endpoints.web.exposure.include: health,info,prometheus
+management.endpoint.health.show-details: when-authorized
+
+<span class="c"># Kubernetes probes, split so a slow dependency doesn't cause a restart</span>
+management.endpoint.health.probes.enabled: <span class="k">true</span>
+<span class="c">#   /actuator/health/liveness   — am I broken? (restart me)</span>
+<span class="c">#   /actuator/health/readiness  — can I serve? (stop routing to me)</span>
+
+<span class="c">// A custom health check is one method</span>
+<span class="k">@Component</span>
+<span class="k">class</span> <span class="t">QueueHealth</span> <span class="k">implements</span> <span class="t">HealthIndicator</span> {
+    <span class="k">public</span> <span class="t">Health</span> health() {
+        <span class="k">return</span> depth() &lt; <span class="n">1000</span> ? <span class="t">Health</span>.up().build()
+                            : <span class="t">Health</span>.down().withDetail(<span class="s">"depth"</span>, depth()).build();
+    }
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Never expose <code>*</code></span>
+            <p>
+              <code>management.endpoints.web.exposure.include=*</code> appears
+              in countless tutorials. It publishes <code>/env</code> and
+              <code>/heapdump</code> — your database password and a complete
+              dump of process memory — to anyone who can reach the port. Expose
+              the specific endpoints you need, and put the management port
+              behind your network policy.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ LOGGING ============ -->
+        <section id="logging">
+          <h2>Logging and DevTools</h2>
+
+          <div class="code">
+            <pre><span class="c"># Logback is the default; SLF4J is the API you code against</span>
+logging.level.root: INFO
+logging.level.org.hibernate.SQL: DEBUG
+logging.group.web: org.springframework.web, org.springframework.http
+logging.level.web: DEBUG                 <span class="c"># set the whole group at once</span>
+logging.file.name: app.log
+
+<span class="c"># Structured JSON logging is built in from Boot 3.4</span>
+logging.structured.format.console: ecs</pre>
+          </div>
+
+          <p>
+            <strong>DevTools</strong> adds an automatic restart on classpath
+            change, using two classloaders — your code in a throwaway one,
+            libraries in a permanent one, so a restart is far faster than a cold
+            boot. It disables itself when running from a fat jar, so it can't
+            reach production by accident. It's a development convenience and
+            nothing more.
+          </p>
+        </section>
+
+        <!-- ============ NATIVE ============ -->
+        <section id="native">
+          <h2>AOT and native images</h2>
+          <p class="lede">
+            Boot 3 can do at build time what it normally does at startup —
+            evaluate conditions, resolve beans — and emit code with the answers
+            baked in.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>JVM</th>
+                  <th>Native image</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Startup</td>
+                  <td>1–3 seconds</td>
+                  <td class="y">Tens of milliseconds</td>
+                </tr>
+                <tr>
+                  <td>Memory</td>
+                  <td>Higher baseline</td>
+                  <td class="y">Much lower</td>
+                </tr>
+                <tr>
+                  <td>Build time</td>
+                  <td>Seconds</td>
+                  <td class="n">Minutes</td>
+                </tr>
+                <tr>
+                  <td>Peak throughput</td>
+                  <td class="y">Higher — JIT warms up</td>
+                  <td>Lower</td>
+                </tr>
+                <tr>
+                  <td>Reflection</td>
+                  <td>Free</td>
+                  <td class="n">Must be registered</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Native suits short-lived and scale-to-zero workloads — functions,
+            CLI tools, anything billed per-millisecond. For a long-running
+            server handling steady traffic, the JVM usually still wins on
+            throughput once it has warmed up. The AOT step also runs on the JVM
+            alone, where it trims a little startup time without giving up
+            dynamic behaviour.
+          </p>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Exposing all actuator endpoints</h3>
+          <p>
+            The single most damaging Boot misconfiguration.
+            <code>include=*</code> puts <code>/env</code> and
+            <code>/heapdump</code> on the network. Treat the management port as
+            privileged infrastructure.
+          </p>
+
+          <h3><code>@Value</code> with a camelCase key in a container</h3>
+          <p>
+            Relaxed binding is a <code>@ConfigurationProperties</code> feature.
+            <code>@Value</code> matches the literal key, so an environment
+            variable that works for one silently fails for the other.
+          </p>
+
+          <h3>Assuming your <code>application.yml</code> wins</h3>
+          <p>
+            It's near the bottom of the ladder. Environment variables injected
+            by your platform beat it, which is by design — but it means the
+            committed file is a default, not a decision. Check
+            <code>/actuator/env</code> before arguing with the config.
+          </p>
+
+          <h3>
+            <code>@ConditionalOnMissingBean</code> in your own configuration
+          </h3>
+          <p>
+            Only dependable in auto-configuration, which is ordered to run last.
+            In application code the outcome depends on processing order you
+            don't control.
+          </p>
+
+          <h3>Unpacking the fat jar and running it by classpath</h3>
+          <div class="code">
+            <pre><span class="c"># ✗ Your class is under BOOT-INF/classes, deps are nested jars</span>
+java -cp app.jar com.example.App
+
+<span class="c"># ✓ Let the launcher do it</span>
+java -jar app.jar
+
+<span class="c"># ✓ Or extract properly first, for a leaner container image</span>
+java -Djarmode=tools -jar app.jar extract --launcher</pre>
+          </div>
+
+          <h3>Slow work in a <code>CommandLineRunner</code></h3>
+          <p>
+            The HTTP port opens before runners execute, so traffic can arrive
+            while warm-up is still going. Gate real availability on the
+            readiness probe instead.
+          </p>
+
+          <h3>Reaching for <code>@SpringBootTest</code> everywhere</h3>
+          <p>
+            Every distinct test configuration builds and caches its own context.
+            A suite with a dozen different
+            <code>@MockitoBean</code> combinations pays a dozen full startups.
+            Keep configurations uniform and prefer slices.
+          </p>
+
+          <h3>Guessing instead of reading the report</h3>
+          <p>
+            When a bean appears you didn't declare, or vanishes when you
+            expected it, <code>--debug</code> or
+            <code>/actuator/conditions</code> tells you precisely which
+            condition decided. This turns most Boot mysteries into a two-minute
+            read.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Boot is conditions plus ordering. It configures what it finds on
+              the classpath, backs off the moment you define the bean yourself,
+              and merges configuration from a strict precedence ladder. When
+              something surprises you, the condition report and
+              <code>/actuator/env</code> answer nearly every question — and both
+              are faster than reasoning about it.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

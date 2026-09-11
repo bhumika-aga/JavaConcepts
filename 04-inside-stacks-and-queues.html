@@ -1,0 +1,2376 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Stacks and Queues</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The name clash</div>
+          <a href="#clash">Two words, four things</a>
+          <div class="grp">Memory</div>
+          <a href="#stackmem">The call stack</a>
+          <a href="#heapmem">The heap</a>
+          <a href="#errors">When each breaks</a>
+          <div class="grp">Structures</div>
+          <a href="#stack">Stack (LIFO)</a>
+          <a href="#queue">Queue (FIFO)</a>
+          <a href="#deque">Deque</a>
+          <a href="#pq">PriorityQueue</a>
+          <a href="#binheap">The binary heap</a>
+          <a href="#blocking">BlockingQueue</a>
+          <div class="grp">Reference</div>
+          <a href="#compare">Compare them all</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            stacks &middot; queues &middot; heaps &middot; and the memory they
+            live in
+          </p>
+          <h1>Inside Stacks and Queues</h1>
+          <p class="dek">
+            Java uses “stack” for two unrelated things and “heap” for two more.
+            Half the confusion in this topic is vocabulary; the other half is
+            knowing which container gives you which guarantee, and what it
+            costs.
+          </p>
+        </header>
+
+        <!-- ============ CLASH ============ -->
+        <section id="clash">
+          <h2>Two words, four things</h2>
+          <p class="lede">
+            Before anything else, separate the memory regions from the data
+            structures. They share names and share nothing else.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>The word</th>
+                  <th>Sense 1 — a memory region</th>
+                  <th>Sense 2 — a data structure</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">stack</td>
+                  <td>
+                    Per-thread store of method frames and locals. The JVM
+                    manages it.
+                  </td>
+                  <td>A LIFO container you create and push onto.</td>
+                </tr>
+                <tr>
+                  <td class="name">heap</td>
+                  <td>
+                    The shared region where every object lives. The GC manages
+                    it.
+                  </td>
+                  <td>
+                    A partially-ordered tree that always yields its smallest
+                    element first.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note">
+            <span class="tag">They are not related</span>
+            <p>
+              The memory stack happens to behave like the LIFO structure —
+              frames push and pop — which is where the shared name came from.
+              The memory heap and the binary heap share <em>nothing</em> but a
+              word; the memory sense means "an unordered pile of storage", the
+              structure sense means "a specific ordered tree". Keep them apart
+              and this whole topic gets easier.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ STACK MEMORY ============ -->
+        <section id="stackmem">
+          <h2>The call stack</h2>
+          <p class="lede">
+            Every thread gets its own. Each method call pushes a
+            <strong>frame</strong> holding that call's local variables,
+            parameters, and return address. Return, and the frame pops.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Scope</dt>
+              <dd>One per thread</dd>
+            </div>
+            <div>
+              <dt>Holds</dt>
+              <dd>Frames, locals, refs</dd>
+            </div>
+            <div>
+              <dt>Cleanup</dt>
+              <dd class="yes">Automatic</dd>
+            </div>
+            <div>
+              <dt>Shared</dt>
+              <dd class="no">Never</dd>
+            </div>
+            <div>
+              <dt>Typical size</dt>
+              <dd>512KB – 1MB</dd>
+            </div>
+            <div>
+              <dt>Overflow</dt>
+              <dd>StackOverflowError</dd>
+            </div>
+          </dl>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="A call stack with three frames, the newest on top, each holding its own locals"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    grows downward as calls nest — only the top frame is
+                    executing
+                  </text>
+
+                  <rect
+                    x="150"
+                    y="34"
+                    width="330"
+                    height="52"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="315"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    chop() ← top, running now
+                  </text>
+                  <text
+                    x="315"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    int i, String name
+                  </text>
+
+                  <rect
+                    x="150"
+                    y="94"
+                    width="330"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="315"
+                    y="116"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    cook()
+                  </text>
+                  <text
+                    x="315"
+                    y="136"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    List items, int total
+                  </text>
+
+                  <rect
+                    x="150"
+                    y="154"
+                    width="330"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="315"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    main()
+                  </text>
+                  <text
+                    x="315"
+                    y="196"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    String[] args
+                  </text>
+
+                  <path
+                    d="M508 60 L544 60 L544 180 L508 180"
+                    fill="none"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text x="556" y="112" font-size="11" fill="var(--key)">
+                    pops in
+                  </text>
+                  <text x="556" y="128" font-size="11" fill="var(--key)">
+                    reverse
+                  </text>
+                  <text x="556" y="144" font-size="11" fill="var(--key)">
+                    order
+                  </text>
+
+                  <text x="12" y="234" font-size="11" fill="var(--ink-faint)">
+                    A local primitive can never be involved in a race — no other
+                    thread can reach this stack.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Why locals are automatically thread-safe.</b> The stack is
+              private to one thread by construction, so nothing on it needs
+              synchronising. Only what the frames <em>point at</em> — objects on
+              the heap — can be shared.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// The classic overflow: recursion with no base case</span>
+<span class="k">static int</span> depth(<span class="k">int</span> n) { <span class="k">return</span> depth(n + <span class="n">1</span>); }
+depth(<span class="n">0</span>);                       <span class="c">// StackOverflowError in milliseconds</span>
+
+<span class="c">// Stack size is a JVM flag, not an API:  java -Xss2m MyApp</span>
+<span class="c">// Raising it treats the symptom. Deep recursion usually wants a loop</span>
+<span class="c">// plus an explicit Deque instead.</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ HEAP MEMORY ============ -->
+        <section id="heapmem">
+          <h2>The heap</h2>
+          <p class="lede">
+            One region, shared by every thread, holding every object you ever
+            allocate. You never free anything — the garbage collector reclaims
+            what nothing can still reach.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Scope</dt>
+              <dd>One per JVM</dd>
+            </div>
+            <div>
+              <dt>Holds</dt>
+              <dd>Every object</dd>
+            </div>
+            <div>
+              <dt>Cleanup</dt>
+              <dd>Garbage collector</dd>
+            </div>
+            <div>
+              <dt>Shared</dt>
+              <dd class="no">By all threads</dd>
+            </div>
+            <div>
+              <dt>Sized with</dt>
+              <dd>-Xmx</dd>
+            </div>
+            <div>
+              <dt>Exhaustion</dt>
+              <dd>OutOfMemoryError</dd>
+            </div>
+          </dl>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Two thread stacks holding references that both point at one shared object on the heap"
+              >
+                <defs>
+                  <marker
+                    id="s1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    STACKS — private
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="190"
+                    height="60"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="107"
+                    y="50"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    thread 1 frame
+                  </text>
+                  <text
+                    x="107"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    User u → #4417
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="100"
+                    width="190"
+                    height="60"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="107"
+                    y="122"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    thread 2 frame
+                  </text>
+                  <text
+                    x="107"
+                    y="142"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    User other → #4417
+                  </text>
+
+                  <line
+                    x1="208"
+                    y1="58"
+                    x2="366"
+                    y2="94"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#s1)"
+                  />
+                  <line
+                    x1="208"
+                    y1="130"
+                    x2="366"
+                    y2="112"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#s1)"
+                  />
+
+                  <text x="380" y="18" font-size="11" fill="var(--ink-faint)">
+                    THE HEAP — shared
+                  </text>
+                  <rect
+                    x="374"
+                    y="28"
+                    width="312"
+                    height="150"
+                    rx="10"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="3"
+                  />
+                  <rect
+                    x="404"
+                    y="80"
+                    width="150"
+                    height="52"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="479"
+                    y="102"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    object #4417
+                  </text>
+                  <text
+                    x="479"
+                    y="120"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--key)"
+                  >
+                    name: "Ada"
+                  </text>
+                  <text
+                    x="530"
+                    y="160"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    one object, two references
+                  </text>
+
+                  <text x="12" y="200" font-size="11" fill="var(--ink-soft)">
+                    The reference lives on the stack. The object lives on the
+                    heap. Two threads can share one reference —
+                  </text>
+                  <text x="12" y="216" font-size="11" fill="var(--ink-soft)">
+                    which is exactly when you need the concurrency machinery.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Variables hold references, not objects.</b> Assigning one
+              variable to another copies the reference — both then point at the
+              same heap object, and a change through either is visible through
+              both.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ ERRORS ============ -->
+        <section id="errors">
+          <h2>When each one breaks</h2>
+          <div class="trio">
+            <div>
+              <h5>StackOverflowError</h5>
+              <p>
+                Too many nested frames. Nearly always unbounded recursion — a
+                missing or unreachable base case.
+              </p>
+            </div>
+            <div>
+              <h5>OutOfMemoryError: Java heap space</h5>
+              <p>
+                Live objects exceed <code>-Xmx</code>. Either a genuine working
+                set that's too big, or a leak holding references it shouldn't.
+              </p>
+            </div>
+            <div>
+              <h5>OutOfMemoryError: unable to create native thread</h5>
+              <p>
+                Not the heap at all — each platform thread needs its own stack,
+                and the OS ran out.
+              </p>
+            </div>
+          </div>
+          <p>
+            Both are <code>Error</code>, not <code>Exception</code>: don't catch
+            them to continue. A <code>StackOverflowError</code> is sometimes
+            survivable, but an <code>OutOfMemoryError</code> usually means the
+            JVM is already unable to do useful work.
+          </p>
+        </section>
+
+        <!-- ============ STACK ============ -->
+        <section id="stack">
+          <h2>Stack — last in, first out</h2>
+          <p class="lede">
+            Push onto the top, pop off the top. The most recently added element
+            is the only one you can reach.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Use</dt>
+              <dd>ArrayDeque</dd>
+            </div>
+            <div>
+              <dt>push / pop</dt>
+              <dd>O(1) amortised</dd>
+            </div>
+            <div>
+              <dt>Order out</dt>
+              <dd>Reverse of in</dd>
+            </div>
+            <div>
+              <dt>Allows null</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>Legacy class</dt>
+              <dd class="no">Avoid Stack</dd>
+            </div>
+          </dl>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="A stack where three elements are pushed and popped from the same top end"
+              >
+                <defs>
+                  <marker
+                    id="s2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <rect
+                    x="230"
+                    y="150"
+                    width="240"
+                    height="40"
+                    rx="7"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="13"
+                    fill="var(--ink)"
+                  >
+                    A — first in, last out
+                  </text>
+
+                  <rect
+                    x="230"
+                    y="104"
+                    width="240"
+                    height="40"
+                    rx="7"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="130"
+                    text-anchor="middle"
+                    font-size="13"
+                    fill="var(--ink)"
+                  >
+                    B
+                  </text>
+
+                  <rect
+                    x="230"
+                    y="58"
+                    width="240"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="350"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    C — last in, first out
+                  </text>
+
+                  <line
+                    x1="140"
+                    y1="24"
+                    x2="140"
+                    y2="66"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                    marker-end="url(#s2)"
+                  />
+                  <text
+                    x="140"
+                    y="18"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    push
+                  </text>
+
+                  <line
+                    x1="560"
+                    y1="66"
+                    x2="560"
+                    y2="24"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                    marker-end="url(#s2)"
+                  />
+                  <text
+                    x="560"
+                    y="18"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    pop
+                  </text>
+
+                  <text
+                    x="350"
+                    y="212"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    both ends of the operation are the same end
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The call stack is this structure.</b> So are undo buttons,
+              browser history, bracket matching, and every iterative rewrite of
+              a recursive algorithm.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// ✓ The modern way</span>
+<span class="t">Deque</span>&lt;<span class="t">String</span>&gt; stack = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+stack.push(<span class="s">"A"</span>);          <span class="c">// addFirst</span>
+stack.push(<span class="s">"B"</span>);
+stack.peek();               <span class="c">// "B" — look, don't remove</span>
+stack.pop();                <span class="c">// "B" — removeFirst</span>
+
+<span class="c">// ✗ The 1996 way. Synchronized on every call, extends Vector,</span>
+<span class="c">//   and iterates BOTTOM-UP — the opposite of pop order.</span>
+<span class="t">Stack</span>&lt;<span class="t">String</span>&gt; old = <span class="k">new</span> <span class="t">Stack</span>&lt;&gt;();
+
+<span class="c">// Turning recursion into iteration — the standard use</span>
+<span class="t">Deque</span>&lt;<span class="t">Node</span>&gt; todo = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+todo.push(root);
+<span class="k">while</span> (!todo.isEmpty()) {
+    <span class="t">Node</span> n = todo.pop();
+    visit(n);
+    <span class="k">for</span> (<span class="t">Node</span> child : n.children()) todo.push(child);
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >The <code>Stack</code> class iterates the wrong way round</span
+            >
+            <p>
+              <code>java.util.Stack</code> extends <code>Vector</code>, so
+              iterating it walks from the <em>bottom</em> — you see insertion
+              order, not pop order. Code that pops in one place and iterates in
+              another quietly disagrees with itself.
+              <code>ArrayDeque</code> iterates head-first, matching
+              <code>pop()</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ QUEUE ============ -->
+        <section id="queue">
+          <h2>Queue — first in, first out</h2>
+          <p class="lede">
+            Add at the tail, remove from the head. Arrival order is preserved
+            exactly, which is what makes it fair.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 180"
+                role="img"
+                aria-label="A queue where elements enter at the tail and leave from the head in arrival order"
+              >
+                <defs>
+                  <marker
+                    id="s3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--val)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <text
+                    x="80"
+                    y="40"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    poll() ← head
+                  </text>
+                  <text
+                    x="620"
+                    y="40"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    tail → offer()
+                  </text>
+
+                  <line
+                    x1="150"
+                    y1="96"
+                    x2="96"
+                    y2="96"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                    marker-end="url(#s3)"
+                  />
+                  <line
+                    x1="604"
+                    y1="96"
+                    x2="550"
+                    y2="96"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                    marker-end="url(#s3)"
+                  />
+
+                  <rect
+                    x="168"
+                    y="72"
+                    width="86"
+                    height="48"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="211"
+                    y="102"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A
+                  </text>
+                  <rect
+                    x="264"
+                    y="72"
+                    width="86"
+                    height="48"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="307"
+                    y="102"
+                    text-anchor="middle"
+                    font-size="14"
+                    fill="var(--ink)"
+                  >
+                    B
+                  </text>
+                  <rect
+                    x="360"
+                    y="72"
+                    width="86"
+                    height="48"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="403"
+                    y="102"
+                    text-anchor="middle"
+                    font-size="14"
+                    fill="var(--ink)"
+                  >
+                    C
+                  </text>
+                  <rect
+                    x="456"
+                    y="72"
+                    width="86"
+                    height="48"
+                    rx="8"
+                    fill="var(--surface)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="499"
+                    y="102"
+                    text-anchor="middle"
+                    font-size="14"
+                    fill="var(--ink)"
+                  >
+                    D
+                  </text>
+
+                  <text
+                    x="350"
+                    y="156"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    A arrived first, so A leaves first — nothing overtakes
+                  </text>
+                </g>
+              </svg>
+            </div>
+          </figure>
+
+          <h3>Two method families, different tempers</h3>
+          <p>
+            Every <code>Queue</code> operation comes in two forms: one that
+            throws on failure and one that returns a sentinel. Mixing them is a
+            common source of surprise.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operation</th>
+                  <th>Throws on failure</th>
+                  <th>Returns special value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Insert</td>
+                  <td class="mono">add(e)</td>
+                  <td class="mono">offer(e) → false</td>
+                </tr>
+                <tr>
+                  <td>Remove</td>
+                  <td class="mono">remove()</td>
+                  <td class="mono">poll() → null</td>
+                </tr>
+                <tr>
+                  <td>Examine</td>
+                  <td class="mono">element()</td>
+                  <td class="mono">peek() → null</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            On an unbounded queue <code>add</code> and <code>offer</code> behave
+            identically, so the distinction only bites once you switch to a
+            bounded implementation — typically in production, under load.
+          </p>
+        </section>
+
+        <!-- ============ DEQUE ============ -->
+        <section id="deque">
+          <h2>Deque — open at both ends</h2>
+          <p class="lede">
+            A double-ended queue. Because you can add and remove at either end,
+            it can act as a stack, a queue, or both — which is why it replaced
+            two older classes.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">Deque</span>&lt;<span class="t">String</span>&gt; d = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+
+<span class="c">// explicit, unambiguous — prefer these in shared code</span>
+d.addFirst(<span class="s">"x"</span>);   d.addLast(<span class="s">"y"</span>);
+d.pollFirst();      d.pollLast();
+d.peekFirst();      d.peekLast();
+
+<span class="c">// stack aliases  → push/pop/peek act on the FIRST element</span>
+<span class="c">// queue aliases  → offer/poll/peek act on first-in-first-out</span></pre>
+          </div>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Implementation</th>
+                  <th>Backing</th>
+                  <th>null allowed</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">ArrayDeque</td>
+                  <td>Circular array</td>
+                  <td class="n">no</td>
+                  <td>The default. Faster than LinkedList for both roles.</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedList</td>
+                  <td>Doubly-linked nodes</td>
+                  <td class="y">yes</td>
+                  <td>
+                    Also a List. Node overhead per element, poor locality.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentLinkedDeque</td>
+                  <td>Lock-free nodes</td>
+                  <td class="n">no</td>
+                  <td>Thread-safe, non-blocking.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note">
+            <span class="tag">Why <code>ArrayDeque</code> rejects null</span>
+            <p>
+              It isn't an oversight. <code>poll()</code> and
+              <code>peek()</code> return <code>null</code> to mean "empty" — so
+              a stored <code>null</code> would make that answer ambiguous.
+              <code>LinkedList</code> permits nulls and inherits exactly that
+              ambiguity, which is one more reason to reach for
+              <code>ArrayDeque</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ PQ ============ -->
+        <section id="pq">
+          <h2>PriorityQueue</h2>
+          <p class="lede">
+            A queue that ignores arrival order entirely. Whatever is
+            <em>smallest</em> by the ordering comes out next — regardless of
+            when it went in.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing</dt>
+              <dd>Binary min-heap</dd>
+            </div>
+            <div>
+              <dt>offer / poll</dt>
+              <dd>O(log n)</dd>
+            </div>
+            <div>
+              <dt>peek</dt>
+              <dd class="yes">O(1)</dd>
+            </div>
+            <div>
+              <dt>contains / remove(o)</dt>
+              <dd class="no">O(n)</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd class="no">Unspecified</dd>
+            </div>
+            <div>
+              <dt>Allows null</dt>
+              <dd class="no">No</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="c">// Natural ordering — smallest first</span>
+<span class="t">Queue</span>&lt;<span class="t">Integer</span>&gt; pq = <span class="k">new</span> <span class="t">PriorityQueue</span>&lt;&gt;();
+pq.addAll(<span class="t">List</span>.of(<span class="n">5</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">3</span>));
+pq.poll();    <span class="c">// 1</span>
+pq.poll();    <span class="c">// 3</span>
+
+<span class="c">// Largest first — reverse the comparator</span>
+<span class="k">new</span> <span class="t">PriorityQueue</span>&lt;<span class="t">Integer</span>&gt;(<span class="t">Comparator</span>.reverseOrder());
+
+<span class="c">// Real use: most urgent task next</span>
+<span class="t">Queue</span>&lt;<span class="t">Task</span>&gt; work =
+    <span class="k">new</span> <span class="t">PriorityQueue</span>&lt;&gt;(<span class="t">Comparator</span>.comparingInt(<span class="t">Task</span>::urgency).reversed());
+
+<span class="c">// The top-K idiom: keep a MIN-heap of size k, evict the smallest</span>
+<span class="t">PriorityQueue</span>&lt;<span class="t">Integer</span>&gt; topK = <span class="k">new</span> <span class="t">PriorityQueue</span>&lt;&gt;();
+<span class="k">for</span> (<span class="k">int</span> v : values) {
+    topK.offer(v);
+    <span class="k">if</span> (topK.size() &gt; k) topK.poll();   <span class="c">// O(n log k), not O(n log n)</span>
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">It is not a sorted collection</span>
+            <p>
+              Only <code>peek</code> and <code>poll</code> respect the ordering.
+              <code>toString()</code>, <code>forEach</code>, and the iterator
+              walk the <strong>internal array</strong>, whose middle is only
+              partially ordered. Printing a <code>PriorityQueue</code> and
+              seeing <code>[1, 3, 9, 5]</code> is not a bug. If you need every
+              element in order, drain it with repeated <code>poll()</code>, or
+              use a <code>TreeSet</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ BINARY HEAP ============ -->
+        <section id="binheap">
+          <h2>The binary heap</h2>
+          <p class="lede">
+            The structure inside <code>PriorityQueue</code>. It is deliberately
+            only <em>half</em> sorted — and that's precisely why it's fast.
+          </p>
+
+          <p>
+            The single invariant:
+            <strong>every parent is ≤ both of its children.</strong> Siblings
+            are never compared to each other. That's weak enough to maintain
+            cheaply and strong enough to guarantee the minimum is always at the
+            root.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 300"
+                role="img"
+                aria-label="A binary min-heap drawn as a tree and as the flat array that actually stores it, with the parent and child index formulas"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <line
+                    x1="350"
+                    y1="52"
+                    x2="230"
+                    y2="112"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="350"
+                    y1="52"
+                    x2="470"
+                    y2="112"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="230"
+                    y1="140"
+                    x2="160"
+                    y2="192"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="230"
+                    y1="140"
+                    x2="300"
+                    y2="192"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="470"
+                    y1="140"
+                    x2="410"
+                    y2="192"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+
+                  <circle cx="350" cy="46" r="26" fill="var(--tree)" />
+                  <text
+                    x="350"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="16"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    1
+                  </text>
+                  <text
+                    x="350"
+                    y="14"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    the root is always the winner
+                  </text>
+
+                  <circle
+                    cx="230"
+                    cy="126"
+                    r="24"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="230"
+                    y="133"
+                    text-anchor="middle"
+                    font-size="15"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    3
+                  </text>
+                  <circle
+                    cx="470"
+                    cy="126"
+                    r="24"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="470"
+                    y="133"
+                    text-anchor="middle"
+                    font-size="15"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    2
+                  </text>
+
+                  <circle
+                    cx="160"
+                    cy="206"
+                    r="22"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="160"
+                    y="213"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    7
+                  </text>
+                  <circle
+                    cx="300"
+                    cy="206"
+                    r="22"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="300"
+                    y="213"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    5
+                  </text>
+                  <circle
+                    cx="410"
+                    cy="206"
+                    r="22"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="410"
+                    y="213"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    4
+                  </text>
+
+                  <text x="520" y="180" font-size="11" fill="var(--good)">
+                    3 ≤ 7 and 3 ≤ 5 ✓
+                  </text>
+                  <text x="520" y="198" font-size="11" fill="var(--good)">
+                    2 ≤ 4 ✓
+                  </text>
+                  <text x="520" y="220" font-size="11" fill="var(--ink-faint)">
+                    3 vs 2? never compared.
+                  </text>
+
+                  <text x="12" y="256" font-size="11" fill="var(--ink-faint)">
+                    stored as a flat array — no node objects, no pointers
+                  </text>
+                  <rect
+                    x="12"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--tree)"
+                  />
+                  <text
+                    x="40"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    1
+                  </text>
+                  <rect
+                    x="72"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="100"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    3
+                  </text>
+                  <rect
+                    x="132"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="160"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    2
+                  </text>
+                  <rect
+                    x="192"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="220"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    7
+                  </text>
+                  <rect
+                    x="252"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="280"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    5
+                  </text>
+                  <rect
+                    x="312"
+                    y="264"
+                    width="56"
+                    height="28"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="340"
+                    y="283"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    4
+                  </text>
+
+                  <text x="386" y="276" font-size="11" fill="var(--key)">
+                    children of i → 2i+1, 2i+2
+                  </text>
+                  <text x="386" y="292" font-size="11" fill="var(--key)">
+                    parent of i → (i-1)/2
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>A complete tree fits an array exactly.</b> No gaps, so position
+              alone encodes the structure — no child pointers to store or
+              follow, and excellent cache behaviour.
+            </figcaption>
+          </figure>
+
+          <h3>The two operations</h3>
+          <ul>
+            <li>
+              <strong>Insert — sift up.</strong> Put the new element at the end
+              of the array, then swap it with its parent while it's smaller. At
+              most <code>log n</code> swaps.
+            </li>
+            <li>
+              <strong>Remove min — sift down.</strong> Take the root, move the
+              last element into its place, then swap it with its smaller child
+              until the invariant holds. Again <code>log n</code>.
+            </li>
+          </ul>
+
+          <p>
+            Both touch a single root-to-leaf path, which is why a heap beats a
+            fully sorted structure for this job: you pay only to find the next
+            winner, never to order the losers.
+          </p>
+        </section>
+
+        <!-- ============ BLOCKING ============ -->
+        <section id="blocking">
+          <h2>BlockingQueue</h2>
+          <p class="lede">
+            A queue that makes threads wait instead of failing. The backbone of
+            every producer–consumer pipeline, and what thread pools use
+            internally.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">BlockingQueue</span>&lt;<span class="t">Job</span>&gt; q = <span class="k">new</span> <span class="t">ArrayBlockingQueue</span>&lt;&gt;(<span class="n">100</span>);
+
+q.put(job);              <span class="c">// blocks while FULL   — natural backpressure</span>
+<span class="t">Job</span> j = q.take();        <span class="c">// blocks while EMPTY  — no polling loop</span>
+
+q.offer(job, <span class="n">2</span>, <span class="t">TimeUnit</span>.SECONDS);   <span class="c">// or give up</span>
+q.poll(<span class="n">2</span>, <span class="t">TimeUnit</span>.SECONDS);</pre>
+          </div>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Implementation</th>
+                  <th>Capacity</th>
+                  <th>Use it when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">ArrayBlockingQueue</td>
+                  <td>Fixed, set at construction</td>
+                  <td>You want a hard limit and real backpressure</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedBlockingQueue</td>
+                  <td>Optionally bounded — <b>unbounded by default</b></td>
+                  <td>Higher throughput; always pass a capacity</td>
+                </tr>
+                <tr>
+                  <td class="name">SynchronousQueue</td>
+                  <td>Zero</td>
+                  <td>Direct handoff; the producer waits for a consumer</td>
+                </tr>
+                <tr>
+                  <td class="name">PriorityBlockingQueue</td>
+                  <td>Unbounded</td>
+                  <td>Urgency ordering across threads</td>
+                </tr>
+                <tr>
+                  <td class="name">DelayQueue</td>
+                  <td>Unbounded</td>
+                  <td>Elements become available only once due</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >The unbounded default is a production hazard</span
+            >
+            <p>
+              <code>new LinkedBlockingQueue&lt;&gt;()</code> has capacity
+              <code>Integer.MAX_VALUE</code>. <code>put</code> then never
+              blocks, so a fast producer piles work into the heap until the JVM
+              dies — and <code>Executors.newFixedThreadPool</code> uses exactly
+              this queue. Always pass a capacity for anything load-bearing.
+            </p>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Producer–consumer with a clean shutdown signal</span>
+<span class="k">static final</span> <span class="t">Job</span> POISON = <span class="k">new</span> <span class="t">Job</span>();
+
+<span class="c">// consumer</span>
+<span class="k">while</span> (<span class="k">true</span>) {
+    <span class="t">Job</span> j = q.take();
+    <span class="k">if</span> (j == POISON) { q.put(POISON); <span class="k">break</span>; }   <span class="c">// pass it on</span>
+    process(j);
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ COMPARE ============ -->
+        <section id="compare">
+          <h2>Compare them all</h2>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Order out</th>
+                  <th class="mono">add</th>
+                  <th class="mono">remove</th>
+                  <th class="mono">peek</th>
+                  <th>null</th>
+                  <th>Safe</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">ArrayDeque (stack)</td>
+                  <td>Reverse of in</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td class="name">ArrayDeque (queue)</td>
+                  <td>Arrival</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedList</td>
+                  <td>Arrival</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td class="name">PriorityQueue</td>
+                  <td>By comparator</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                </tr>
+                <tr>
+                  <td class="name">ArrayBlockingQueue</td>
+                  <td>Arrival</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedBlockingQueue</td>
+                  <td>Arrival</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentLinkedQueue</td>
+                  <td>Arrival</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                </tr>
+                <tr>
+                  <td class="name">Stack (legacy)</td>
+                  <td>Reverse of in</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td class="y">yes</td>
+                  <td class="mid">locked</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size: 15px; color: var(--ink-faint)">
+            * amortised — an array-backed structure occasionally doubles its
+            capacity.
+          </p>
+
+          <h4>Picking one</h4>
+          <ul class="pick">
+            <li>
+              <span class="want">I need last-in-first-out</span
+              ><span class="use">ArrayDeque</span>
+            </li>
+            <li>
+              <span class="want">I need first-in-first-out</span
+              ><span class="use">ArrayDeque</span>
+            </li>
+            <li>
+              <span class="want">Most urgent item next</span
+              ><span class="use">PriorityQueue</span>
+            </li>
+            <li>
+              <span class="want">Hand work between threads</span
+              ><span class="use">ArrayBlockingQueue</span>
+            </li>
+            <li>
+              <span class="want">Sorted <em>and</em> fully traversable</span
+              ><span class="use">TreeSet / TreeMap</span>
+            </li>
+            <li>
+              <span class="want">Both ends, lock-free</span
+              ><span class="use">ConcurrentLinkedDeque</span>
+            </li>
+            <li>
+              <span class="want">Top K of a large stream</span
+              ><span class="use">PriorityQueue of size k</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Printing a PriorityQueue and believing it</h3>
+          <p>
+            The array is heap-ordered, not sorted. Only the head is guaranteed.
+            This is the single most common misunderstanding in this topic, and
+            it survives testing because small heaps often <em>look</em> sorted
+            by accident.
+          </p>
+
+          <h3>Using <code>java.util.Stack</code></h3>
+          <p>
+            Synchronized on every operation whether you need it or not, extends
+            <code>Vector</code> so it exposes index-based mutation that has no
+            business on a stack, and iterates in the opposite order from
+            <code>pop()</code>. <code>ArrayDeque</code> is faster and better
+            behaved in every respect.
+          </p>
+
+          <h3>Assuming <code>LinkedBlockingQueue</code> is bounded</h3>
+          <p>
+            It isn't, unless you say so. Combined with a fixed thread pool, an
+            unbounded queue converts a throughput problem into an
+            <code>OutOfMemoryError</code> — and hides the backlog until the
+            moment it kills you.
+          </p>
+
+          <h3>Mutating an element that's already in a PriorityQueue</h3>
+          <div class="code">
+            <pre>task.setUrgency(<span class="n">10</span>);      <span class="c">// the heap does NOT re-order itself</span>
+<span class="c">// The invariant is now broken and poll() may return the wrong task.</span>
+
+<span class="c">// ✓ remove, mutate, re-insert</span>
+pq.remove(task);            <span class="c">// O(n)</span>
+task.setUrgency(<span class="n">10</span>);
+pq.offer(task);             <span class="c">// O(log n)</span></pre>
+          </div>
+
+          <h3>Catching StackOverflowError to "handle" recursion</h3>
+          <p>
+            The stack is already exhausted, so your handler has very little room
+            to run in, and any state built during the descent is in an unknown
+            condition. Fix the recursion or convert it to an explicit
+            <code>Deque</code> loop.
+          </p>
+
+          <h3>Reaching for <code>LinkedList</code> out of habit</h3>
+          <p>
+            It's a fine <code>Deque</code> and a poor <code>List</code>. Every
+            element is a separate node with two pointers, so it uses far more
+            memory than <code>ArrayDeque</code> and scatters across the heap.
+            Unless you specifically need <code>null</code> elements or the
+            <code>List</code> interface, prefer <code>ArrayDeque</code>.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Two memory regions and three container shapes, sharing two
+              unfortunate names. Locals live on a private stack and are safe by
+              construction; objects live on the shared heap and are not. For
+              containers: <code>ArrayDeque</code> for both LIFO and FIFO,
+              <code>PriorityQueue</code> when order of importance beats order of
+              arrival, and a bounded <code>BlockingQueue</code> whenever two
+              threads are involved.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

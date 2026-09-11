@@ -1,0 +1,2447 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Java Generics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The idea</div>
+          <a href="#why">Why generics exist</a>
+          <a href="#vocab">The vocabulary</a>
+          <div class="grp">Writing them</div>
+          <a href="#classes">Generic classes</a>
+          <a href="#methods">Generic methods</a>
+          <a href="#bounds">Bounded types</a>
+          <div class="grp">The hard part</div>
+          <a href="#invariance">Invariance</a>
+          <a href="#wildcards">Wildcards &amp; PECS</a>
+          <a href="#capture">Wildcard capture</a>
+          <div class="grp">Underneath</div>
+          <a href="#erasure">Type erasure</a>
+          <a href="#forbidden">What erasure forbids</a>
+          <a href="#arrays">Arrays vs generics</a>
+          <a href="#raw">Raw types</a>
+          <div class="grp">Reference</div>
+          <a href="#cheat">Cheat sheet</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            java generics &middot; from the cast to the wildcard
+          </p>
+          <h1>Inside Java Generics</h1>
+          <p class="dek">
+            Generics are a <em>compile-time</em> promise about what a container
+            holds. Understanding them means understanding exactly how much of
+            that promise survives to runtime — which is almost none of it.
+          </p>
+        </header>
+
+        <!-- ============ WHY ============ -->
+        <section id="why">
+          <h2>Why generics exist</h2>
+          <p class="lede">
+            Before Java 5, every collection held <code>Object</code>. You knew
+            what was inside; the compiler didn't. So you cast on the way out,
+            and found out you were wrong in production.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Java 1.4 — legal, and a trap</span>
+<span class="t">List</span> names = <span class="k">new</span> <span class="t">ArrayList</span>();
+names.add(<span class="s">"Ada"</span>);
+names.add(<span class="n">42</span>);                       <span class="c">// nothing stops this</span>
+
+<span class="t">String</span> s = (<span class="t">String</span>) names.get(<span class="n">1</span>);   <span class="c">// ClassCastException, at runtime</span></pre>
+          </div>
+
+          <p>
+            The cast is the tell. Every cast is a place where you know something
+            the compiler doesn't, and every such place is a possible crash.
+            Generics let you say the thing you know, once, in the type.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 210"
+                role="img"
+                aria-label="Without generics an error surfaces at runtime after a cast; with generics the same error is caught at compile time"
+              >
+                <defs>
+                  <marker
+                    id="g1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--hot)">
+                    WITHOUT GENERICS — the error travels
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="112"
+                    height="38"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="68"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    you write it
+                  </text>
+                  <line
+                    x1="128"
+                    y1="47"
+                    x2="164"
+                    y2="47"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g1)"
+                  />
+                  <rect
+                    x="168"
+                    y="28"
+                    width="112"
+                    height="38"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="224"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    it compiles
+                  </text>
+                  <line
+                    x1="284"
+                    y1="47"
+                    x2="320"
+                    y2="47"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g1)"
+                  />
+                  <rect
+                    x="324"
+                    y="28"
+                    width="112"
+                    height="38"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="380"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    it ships
+                  </text>
+                  <line
+                    x1="440"
+                    y1="47"
+                    x2="476"
+                    y2="47"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    marker-end="url(#g1)"
+                  />
+                  <rect
+                    x="480"
+                    y="24"
+                    width="206"
+                    height="46"
+                    rx="6"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="583"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    ClassCastException
+                  </text>
+                  <text
+                    x="583"
+                    y="60"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    in front of a customer
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="96"
+                    x2="688"
+                    y2="96"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text x="12" y="126" font-size="11" fill="var(--good)">
+                    WITH GENERICS — the error stops at the first gate
+                  </text>
+                  <rect
+                    x="12"
+                    y="136"
+                    width="112"
+                    height="38"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="68"
+                    y="160"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    you write it
+                  </text>
+                  <line
+                    x1="128"
+                    y1="155"
+                    x2="164"
+                    y2="155"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g1)"
+                  />
+                  <rect
+                    x="168"
+                    y="132"
+                    width="150"
+                    height="46"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="243"
+                    y="152"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    compiler refuses
+                  </text>
+                  <text
+                    x="243"
+                    y="168"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    before anything runs
+                  </text>
+                  <text x="336" y="159" font-size="11" fill="var(--ink-faint)">
+                    nothing downstream ever sees it
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Generics buy you one thing: earlier failure.</b> They add no
+              speed and no runtime capability — the entire benefit is that a
+              whole class of bug becomes uncompilable.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// Same code, typed</span>
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; names = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+names.add(<span class="s">"Ada"</span>);
+names.add(<span class="n">42</span>);                <span class="c">// ✗ won't compile</span>
+
+<span class="t">String</span> s = names.get(<span class="n">0</span>);      <span class="c">// no cast — the compiler already knows</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ VOCAB ============ -->
+        <section id="vocab">
+          <h2>The vocabulary</h2>
+          <p class="lede">
+            Four words that get used interchangeably in conversation and mean
+            quite different things in the spec.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Term</th>
+                  <th>What it is</th>
+                  <th>Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">type parameter</td>
+                  <td>The placeholder in the declaration</td>
+                  <td class="mono">class Box&lt;T&gt;</td>
+                </tr>
+                <tr>
+                  <td class="name">type argument</td>
+                  <td>The real type you supply at the use site</td>
+                  <td class="mono">Box&lt;String&gt;</td>
+                </tr>
+                <tr>
+                  <td class="name">parameterized type</td>
+                  <td>The combination of the two</td>
+                  <td class="mono">Box&lt;String&gt;</td>
+                </tr>
+                <tr>
+                  <td class="name">raw type</td>
+                  <td>The generic type used with no argument at all</td>
+                  <td class="mono">Box</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>The conventional single letters</h4>
+          <p>
+            Nothing enforces these, but every Java codebase follows them, and
+            breaking the convention makes your code read as unfamiliar for no
+            gain.
+          </p>
+          <ul>
+            <li><code>T</code> — type. The generic default.</li>
+            <li>
+              <code>E</code> — element. Used throughout the collections
+              framework.
+            </li>
+            <li>
+              <code>K</code>, <code>V</code> — key and value, for anything
+              map-shaped.
+            </li>
+            <li>
+              <code>R</code> — result, usually the return type of a function.
+            </li>
+            <li>
+              <code>S</code>, <code>U</code> — second and third type when you
+              need more.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ CLASSES ============ -->
+        <section id="classes">
+          <h2>Generic classes</h2>
+          <p class="lede">
+            One declaration, any number of concrete types. The type parameter
+            behaves like a field of the class — visible to every instance
+            method.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Declared with</dt>
+              <dd>class Name&lt;T&gt;</dd>
+            </div>
+            <div>
+              <dt>Scope of T</dt>
+              <dd>The whole class body</dd>
+            </div>
+            <div>
+              <dt>Static context</dt>
+              <dd class="no">T not available</dd>
+            </div>
+            <div>
+              <dt>Runtime cost</dt>
+              <dd class="yes">None</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="k">class</span> <span class="t">Box</span>&lt;<span class="t">T</span>&gt; {
+    <span class="k">private</span> <span class="t">T</span> item;
+
+    <span class="k">void</span> put(<span class="t">T</span> item) { <span class="k">this</span>.item = item; }
+    <span class="t">T</span>    take()          { <span class="k">return</span> item; }
+
+    <span class="c">// ✗ won't compile — statics belong to the class, which has no T</span>
+    <span class="c">// static T shared;</span>
+}
+
+<span class="t">Box</span>&lt;<span class="t">String</span>&gt; b = <span class="k">new</span> <span class="t">Box</span>&lt;&gt;();   <span class="c">// diamond: inferred from the left</span>
+b.put(<span class="s">"hello"</span>);
+<span class="t">String</span> s = b.take();               <span class="c">// no cast</span>
+
+<span class="c">// More than one parameter is ordinary</span>
+<span class="k">class</span> <span class="t">Pair</span>&lt;<span class="t">K</span>, <span class="t">V</span>&gt; {
+    <span class="k">private final</span> <span class="t">K</span> key;
+    <span class="k">private final</span> <span class="t">V</span> value;
+    <span class="t">Pair</span>(<span class="t">K</span> key, <span class="t">V</span> value) { <span class="k">this</span>.key = key; <span class="k">this</span>.value = value; }
+}</pre>
+          </div>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 190"
+                role="img"
+                aria-label="One generic class declaration substituting three different type arguments to produce three distinct compile-time types"
+              >
+                <defs>
+                  <marker
+                    id="g2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="18" font-size="11" fill="var(--ink-faint)">
+                    ONE DECLARATION
+                  </text>
+                  <rect
+                    x="12"
+                    y="66"
+                    width="168"
+                    height="58"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="96"
+                    y="90"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    class Box&lt;T&gt;
+                  </text>
+                  <text
+                    x="96"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--key)"
+                  >
+                    T put(T), T take()
+                  </text>
+
+                  <line
+                    x1="186"
+                    y1="95"
+                    x2="228"
+                    y2="60"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g2)"
+                  />
+                  <line
+                    x1="186"
+                    y1="95"
+                    x2="228"
+                    y2="95"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g2)"
+                  />
+                  <line
+                    x1="186"
+                    y1="95"
+                    x2="228"
+                    y2="130"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#g2)"
+                  />
+                  <text x="196" y="46" font-size="10" fill="var(--ink-faint)">
+                    T :=
+                  </text>
+
+                  <text x="300" y="18" font-size="11" fill="var(--ink-faint)">
+                    THREE UNRELATED TYPES, TO THE COMPILER
+                  </text>
+
+                  <rect
+                    x="234"
+                    y="36"
+                    width="200"
+                    height="46"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="334"
+                    y="55"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Box&lt;String&gt;
+                  </text>
+                  <text
+                    x="334"
+                    y="71"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    String put(String)
+                  </text>
+
+                  <rect
+                    x="234"
+                    y="88"
+                    width="200"
+                    height="46"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="334"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Box&lt;Integer&gt;
+                  </text>
+                  <text
+                    x="334"
+                    y="123"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    Integer put(Integer)
+                  </text>
+
+                  <rect
+                    x="234"
+                    y="140"
+                    width="200"
+                    height="42"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="334"
+                    y="166"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Box&lt;List&lt;User&gt;&gt;
+                  </text>
+
+                  <text x="452" y="86" font-size="10.5" fill="var(--ink-faint)">
+                    Box&lt;String&gt; is NOT assignable to
+                  </text>
+                  <text
+                    x="452"
+                    y="102"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    Box&lt;Integer&gt; — nor to Box&lt;Object&gt;.
+                  </text>
+                  <text x="452" y="126" font-size="10.5" fill="var(--key)">
+                    They share a declaration,
+                  </text>
+                  <text x="452" y="142" font-size="10.5" fill="var(--key)">
+                    not a subtype relationship.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Substitution, not inheritance.</b>
+              <code>Box&lt;String&gt;</code> and
+              <code>Box&lt;Integer&gt;</code> are as unrelated to each other as
+              <code>String</code> and <code>Integer</code> are — a fact that
+              surprises people in Part&nbsp;6.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ METHODS ============ -->
+        <section id="methods">
+          <h2>Generic methods</h2>
+          <p class="lede">
+            A method can declare its own type parameter, independent of its
+            class. The declaration goes between the modifiers and the return
+            type — the position everyone forgets.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">//     ↓ the declaration lives here</span>
+<span class="k">static</span> &lt;<span class="t">T</span>&gt; <span class="t">T</span> firstOrNull(<span class="t">List</span>&lt;<span class="t">T</span>&gt; list) {
+    <span class="k">return</span> list.isEmpty() ? <span class="k">null</span> : list.get(<span class="n">0</span>);
+}
+
+<span class="c">// T is inferred from the argument — you rarely name it</span>
+<span class="t">String</span> s = firstOrNull(listOfStrings);
+
+<span class="c">// but you can, when inference can't get there</span>
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; empty = <span class="t">Collections</span>.&lt;<span class="t">String</span>&gt;emptyList();
+
+<span class="c">// Several parameters, and one that relates two types</span>
+<span class="k">static</span> &lt;<span class="t">K</span>, <span class="t">V</span>&gt; <span class="t">Map</span>&lt;<span class="t">V</span>, <span class="t">K</span>&gt; invert(<span class="t">Map</span>&lt;<span class="t">K</span>, <span class="t">V</span>&gt; in) { <span class="c">/* … */</span> }</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag"
+              >A static method can be generic — a static field cannot</span
+            >
+            <p>
+              This trips people constantly.
+              <code>static &lt;T&gt; T pick(...)</code> is fine, because the
+              method declares its <em>own</em> <code>T</code>, resolved per
+              call. <code>static T field;</code> is not, because a class-level
+              <code>T</code> only exists per-instance, and statics have no
+              instance to get it from.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ BOUNDS ============ -->
+        <section id="bounds">
+          <h2>Bounded type parameters</h2>
+          <p class="lede">
+            An unbounded <code>T</code> is only known to be an
+            <code>Object</code>, so you can barely do anything with it. A bound
+            trades away some flexibility for capability.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Upper bound: T is at least a Number, so Number's methods are usable</span>
+<span class="k">static</span> &lt;<span class="t">T</span> <span class="k">extends</span> <span class="t">Number</span>&gt; <span class="k">double</span> sum(<span class="t">List</span>&lt;<span class="t">T</span>&gt; nums) {
+    <span class="k">double</span> total = <span class="n">0</span>;
+    <span class="k">for</span> (<span class="t">T</span> n : nums) total += n.doubleValue();   <span class="c">// allowed by the bound</span>
+    <span class="k">return</span> total;
+}
+
+<span class="c">// Multiple bounds — a class first (if any), then interfaces, joined by &amp;</span>
+&lt;<span class="t">T</span> <span class="k">extends</span> <span class="t">Number</span> &amp; <span class="t">Comparable</span>&lt;<span class="t">T</span>&gt; &amp; <span class="t">Serializable</span>&gt;
+
+<span class="c">// Recursive bound — "T is comparable to its own kind".</span>
+<span class="c">// Looks alarming, is idiomatic, and is how Enum is declared.</span>
+<span class="k">static</span> &lt;<span class="t">T</span> <span class="k">extends</span> <span class="t">Comparable</span>&lt;<span class="t">T</span>&gt;&gt; <span class="t">T</span> max(<span class="t">List</span>&lt;<span class="t">T</span>&gt; list) {
+    <span class="t">T</span> best = list.get(<span class="n">0</span>);
+    <span class="k">for</span> (<span class="t">T</span> item : list) <span class="k">if</span> (item.compareTo(best) &gt; <span class="n">0</span>) best = item;
+    <span class="k">return</span> best;
+}</pre>
+          </div>
+
+          <p>
+            Note that <code>extends</code> here means "is a subtype of",
+            covering both classes and interfaces. There is no
+            <code>implements</code> in a bound — the keyword is always
+            <code>extends</code>, even for interfaces.
+          </p>
+        </section>
+
+        <!-- ============ INVARIANCE ============ -->
+        <section id="invariance">
+          <h2>Invariance</h2>
+          <p class="lede">
+            Every apple is a fruit. A <code>List&lt;Apple&gt;</code> is
+            nonetheless <strong>not</strong> a <code>List&lt;Fruit&gt;</code>.
+            This is the single most confusing rule in generics, and it exists
+            for a reason you can see in four lines.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="If a list of apples could be assigned to a list of fruit, a banana could legally be added, breaking the original list's type"
+              >
+                <defs>
+                  <marker
+                    id="g3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--hot)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <rect
+                    x="16"
+                    y="52"
+                    width="180"
+                    height="88"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="106"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    List&lt;Apple&gt;
+                  </text>
+                  <circle
+                    cx="62"
+                    cy="108"
+                    r="13"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="106"
+                    cy="108"
+                    r="13"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="150"
+                    cy="108"
+                    r="13"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="106"
+                    y="160"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    the real object
+                  </text>
+
+                  <text
+                    x="252"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    IF this were
+                  </text>
+                  <text
+                    x="252"
+                    y="104"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    allowed…
+                  </text>
+                  <line
+                    x1="204"
+                    y1="96"
+                    x2="296"
+                    y2="96"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 4"
+                    marker-end="url(#g3)"
+                  />
+
+                  <rect
+                    x="304"
+                    y="52"
+                    width="180"
+                    height="88"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    stroke-dasharray="7 5"
+                  />
+                  <text
+                    x="394"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    List&lt;Fruit&gt;
+                  </text>
+                  <text
+                    x="394"
+                    y="104"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    a variable that believes
+                  </text>
+                  <text
+                    x="394"
+                    y="120"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    it may hold ANY fruit
+                  </text>
+
+                  <line
+                    x1="492"
+                    y1="96"
+                    x2="560"
+                    y2="96"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    marker-end="url(#g3)"
+                  />
+                  <rect
+                    x="566"
+                    y="66"
+                    width="120"
+                    height="60"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="626"
+                    y="90"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    add(banana)
+                  </text>
+                  <text
+                    x="626"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    perfectly legal
+                  </text>
+
+                  <text
+                    x="350"
+                    y="186"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    …and now a banana sits in a List&lt;Apple&gt;.
+                  </text>
+                  <text
+                    x="350"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-soft)"
+                  >
+                    Java forbids the first arrow, so the last box can never
+                    happen.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The assignment is banned to protect the writes.</b> Anyone
+              holding a <code>List&lt;Fruit&gt;</code> reference is entitled to
+              add any fruit to it — so a <code>List&lt;Apple&gt;</code> must
+              never be reachable through one.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">List</span>&lt;<span class="t">Apple</span>&gt; apples = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+<span class="t">List</span>&lt;<span class="t">Fruit</span>&gt; fruit  = apples;     <span class="c">// ✗ compile error — the guard</span>
+fruit.add(<span class="k">new</span> <span class="t">Banana</span>());            <span class="c">// would have been legal</span>
+<span class="t">Apple</span> a = apples.get(<span class="n">0</span>);           <span class="c">// would have exploded</span></pre>
+          </div>
+
+          <p>
+            Generic types in Java are therefore <strong>invariant</strong>:
+            <code>Box&lt;A&gt;</code> is a subtype of
+            <code>Box&lt;B&gt;</code> only when <code>A</code> and
+            <code>B</code> are the same type. Wildcards are how you get
+            controlled flexibility back.
+          </p>
+        </section>
+
+        <!-- ============ WILDCARDS ============ -->
+        <section id="wildcards">
+          <h2>Wildcards and PECS</h2>
+          <p class="lede">
+            Two loosenings that are exact opposites. One makes a type readable,
+            the other makes it writable. Neither gives you both, and that
+            restriction is the whole point.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>? extends T</dt>
+              <dd>Read as T</dd>
+            </div>
+            <div>
+              <dt>Write into it</dt>
+              <dd class="no">Only null</dd>
+            </div>
+            <div>
+              <dt>? super T</dt>
+              <dd>Write T</dd>
+            </div>
+            <div>
+              <dt>Read out of it</dt>
+              <dd class="no">Only Object</dd>
+            </div>
+          </dl>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="An extends wildcard permits reads and blocks writes, while a super wildcard permits writes and degrades reads to Object"
+              >
+                <defs>
+                  <marker
+                    id="g4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <rect
+                    x="30"
+                    y="60"
+                    width="196"
+                    height="70"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="128"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    List&lt;? extends Fruit&gt;
+                  </text>
+                  <text
+                    x="128"
+                    y="104"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    "some ONE kind of fruit —
+                  </text>
+                  <text
+                    x="128"
+                    y="119"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--val)"
+                  >
+                    I don't know which"
+                  </text>
+
+                  <g color="var(--good)">
+                    <line
+                      x1="234"
+                      y1="80"
+                      x2="300"
+                      y2="80"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="84"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    get() → Fruit ✓
+                  </text>
+
+                  <g color="var(--hot)">
+                    <line
+                      x1="300"
+                      y1="112"
+                      x2="238"
+                      y2="112"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="116"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    add(…) ✗ — which fruit?
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="152"
+                    x2="688"
+                    y2="152"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <rect
+                    x="30"
+                    y="166"
+                    width="196"
+                    height="52"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="128"
+                    y="188"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    List&lt;? super Apple&gt;
+                  </text>
+                  <text
+                    x="128"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--tree)"
+                  >
+                    "definitely accepts apples"
+                  </text>
+
+                  <g color="var(--good)">
+                    <line
+                      x1="300"
+                      y1="182"
+                      x2="238"
+                      y2="182"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="186"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    add(apple) ✓
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="234"
+                      y1="208"
+                      x2="300"
+                      y2="208"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#g4)"
+                    />
+                  </g>
+                  <text
+                    x="308"
+                    y="212"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    get() → Object only
+                  </text>
+
+                  <text x="12" y="28" font-size="11" fill="var(--ink-faint)">
+                    Each wildcard opens one direction and closes the other.
+                    There is no form that opens both.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b
+                >PECS — Producer <span style="color: var(--val)">Extends</span>,
+                Consumer <span style="color: var(--tree)">Super</span>.</b
+              >
+              If the parameter hands data to you, use <code>extends</code>. If
+              it swallows data you supply, use <code>super</code>. If it does
+              both, use a plain <code>T</code>.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// The canonical PECS signature, straight out of the JDK</span>
+<span class="k">public static</span> &lt;<span class="t">T</span>&gt; <span class="k">void</span> copy(<span class="t">List</span>&lt;? <span class="k">super</span> <span class="t">T</span>&gt; dest,     <span class="c">// consumer → super</span>
+                              <span class="t">List</span>&lt;? <span class="k">extends</span> <span class="t">T</span>&gt; src) {  <span class="c">// producer → extends</span>
+    <span class="k">for</span> (<span class="t">T</span> item : src) dest.add(item);
+}
+
+<span class="c">// Why it matters — this call only compiles because of the wildcards</span>
+<span class="t">List</span>&lt;<span class="t">Object</span>&gt; dest = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+<span class="t">List</span>&lt;<span class="t">Integer</span>&gt; src = <span class="t">List</span>.of(<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>);
+copy(dest, src);                     <span class="c">// ✓</span>
+
+<span class="c">// The unbounded wildcard: "a list of something". Read-only in practice.</span>
+<span class="k">static</span> <span class="k">void</span> printAll(<span class="t">List</span>&lt;?&gt; list) {
+    <span class="k">for</span> (<span class="t">Object</span> o : list) <span class="t">System</span>.out.println(o);
+    <span class="c">// list.add(anything);   ✗ — except literal null</span>
+}</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Where wildcards belong</span>
+            <p>
+              Use them on <strong>method parameters</strong>, to accept more
+              callers. Do <em>not</em> use them as
+              <strong>return types</strong> — you push the awkwardness onto
+              every caller, who then has to deal with a wildcard they can't
+              name. And never on fields.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ CAPTURE ============ -->
+        <section id="capture">
+          <h2>Wildcard capture</h2>
+          <p class="lede">
+            Occasionally the compiler refuses something obviously safe, because
+            it can't prove two wildcards refer to the same type. The fix is a
+            private helper — an idiom worth recognising.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Swap two elements. Looks fine. Doesn't compile.</span>
+<span class="k">static void</span> swap(<span class="t">List</span>&lt;?&gt; list, <span class="k">int</span> i, <span class="k">int</span> j) {
+    <span class="t">Object</span> tmp = list.get(i);
+    list.set(i, list.get(j));      <span class="c">// ✗ can't add to List&lt;?&gt;</span>
+    list.set(j, tmp);              <span class="c">// ✗</span>
+}
+
+<span class="c">// The capture helper: give the wildcard a NAME, once.</span>
+<span class="k">static void</span> swap(<span class="t">List</span>&lt;?&gt; list, <span class="k">int</span> i, <span class="k">int</span> j) {
+    swapHelper(list, i, j);
+}
+<span class="k">private static</span> &lt;<span class="t">T</span>&gt; <span class="k">void</span> swapHelper(<span class="t">List</span>&lt;<span class="t">T</span>&gt; list, <span class="k">int</span> i, <span class="k">int</span> j) {
+    <span class="t">T</span> tmp = list.get(i);          <span class="c">// now T is a real, single type</span>
+    list.set(i, list.get(j));
+    list.set(j, tmp);
+}</pre>
+          </div>
+
+          <p>
+            The public signature keeps the wildcard so callers stay
+            unconstrained; the private method captures it as a concrete
+            <code>T</code> so the body type-checks. You'll see
+            <code>…Helper</code> methods like this throughout the JDK for
+            exactly this reason.
+          </p>
+        </section>
+
+        <!-- ============ ERASURE ============ -->
+        <section id="erasure">
+          <h2>Type erasure</h2>
+          <p class="lede">
+            The compiler checks every type argument — then
+            <strong>deletes them</strong>. At runtime there is no such thing as
+            a <code>List&lt;String&gt;</code>; there is only a
+            <code>List</code>.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Source code carrying type arguments compiles to bytecode where the parameters are replaced by their bounds and casts are inserted"
+              >
+                <defs>
+                  <marker
+                    id="g5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="18" font-size="11" fill="var(--val)">
+                    WHAT YOU WRITE
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="290"
+                    height="112"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text x="28" y="52" font-size="11" fill="var(--ink)">
+                    class Box&lt;T&gt; {
+                  </text>
+                  <text x="28" y="72" font-size="11" fill="var(--ink)">
+                    T item;
+                  </text>
+                  <text x="28" y="92" font-size="11" fill="var(--ink)">
+                    T take() { return item; }
+                  </text>
+                  <text x="28" y="112" font-size="11" fill="var(--ink)">}</text>
+                  <text x="28" y="132" font-size="11" fill="var(--val)">
+                    String s = box.take();
+                  </text>
+
+                  <line
+                    x1="310"
+                    y1="84"
+                    x2="358"
+                    y2="84"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2.5"
+                    marker-end="url(#g5)"
+                  />
+                  <text
+                    x="334"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-faint)"
+                  >
+                    javac
+                  </text>
+
+                  <text x="366" y="18" font-size="11" fill="var(--key)">
+                    WHAT ACTUALLY RUNS
+                  </text>
+                  <rect
+                    x="366"
+                    y="28"
+                    width="320"
+                    height="112"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text x="382" y="52" font-size="11" fill="var(--ink)">
+                    class Box {
+                  </text>
+                  <text x="382" y="72" font-size="11" fill="var(--ink)">
+                    Object item;
+                  </text>
+                  <text x="382" y="92" font-size="11" fill="var(--ink)">
+                    Object take() { return item; }
+                  </text>
+                  <text x="382" y="112" font-size="11" fill="var(--ink)">
+                    }
+                  </text>
+                  <text x="382" y="132" font-size="11" fill="var(--key)">
+                    String s = (String) box.take();
+                  </text>
+
+                  <text x="12" y="170" font-size="11" fill="var(--ink-soft)">
+                    T becomes its bound — Object when unbounded, Number for
+                    &lt;T extends Number&gt;.
+                  </text>
+                  <text x="12" y="190" font-size="11" fill="var(--ink-soft)">
+                    The casts you stopped writing did not disappear. The
+                    compiler writes them for you.
+                  </text>
+                  <text
+                    x="12"
+                    y="210"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Generics are a source-level feature with a bytecode-level
+                    ghost.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Why it works this way:</b> Java 5 had to run existing Java 1.4
+              bytecode unchanged. Erasure was the price of that compatibility —
+              and every restriction in the next section is a consequence of it.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">List</span>&lt;<span class="t">String</span>&gt;  a = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+<span class="t">List</span>&lt;<span class="t">Integer</span>&gt; b = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+
+a.getClass() == b.getClass();       <span class="c">// true — both are just ArrayList</span>
+<span class="t">System</span>.out.println(a.getClass());   <span class="c">// class java.util.ArrayList</span></pre>
+          </div>
+
+          <h3>What survives erasure</h3>
+          <p>
+            Not quite everything is deleted. Type arguments that appear in a
+            <strong>class or method signature</strong> are kept in the class
+            file as metadata, which is how reflection and frameworks recover
+            them.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Erased at runtime — a local variable's type argument is gone</span>
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; local = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+
+<span class="c">// Retained — a field's declared generic type is readable via reflection</span>
+<span class="k">class</span> <span class="t">Holder</span> { <span class="t">List</span>&lt;<span class="t">String</span>&gt; names; }
+<span class="t">Type</span> t = <span class="t">Holder</span>.<span class="k">class</span>.getDeclaredField(<span class="s">"names"</span>).getGenericType();
+<span class="c">// → java.util.List&lt;java.lang.String&gt;</span>
+
+<span class="c">// This is the trick behind the "super type token" you see in Jackson, Guice…</span>
+<span class="k">new</span> <span class="t">TypeReference</span>&lt;<span class="t">List</span>&lt;<span class="t">User</span>&gt;&gt;() {}   <span class="c">// anonymous subclass ⇒ signature retained</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ FORBIDDEN ============ -->
+        <section id="forbidden">
+          <h2>What erasure forbids</h2>
+          <p class="lede">
+            Seven rules that look arbitrary in isolation and are all the same
+            rule: <em>the type argument is not there at runtime.</em>
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>You can't write</th>
+                  <th>Because</th>
+                  <th>Do instead</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">new T()</td>
+                  <td>No class object to instantiate</td>
+                  <td class="mono">pass a Supplier&lt;T&gt;</td>
+                </tr>
+                <tr>
+                  <td class="mono">new T[10]</td>
+                  <td>Arrays need a reified component type</td>
+                  <td class="mono">(T[]) new Object[10]</td>
+                </tr>
+                <tr>
+                  <td class="mono">x instanceof List&lt;String&gt;</td>
+                  <td>Nothing to test against</td>
+                  <td class="mono">x instanceof List&lt;?&gt;</td>
+                </tr>
+                <tr>
+                  <td class="mono">List&lt;int&gt;</td>
+                  <td>Primitives aren't Objects</td>
+                  <td class="mono">List&lt;Integer&gt;</td>
+                </tr>
+                <tr>
+                  <td class="mono">static T field;</td>
+                  <td>No instance to resolve T</td>
+                  <td>make it an instance field</td>
+                </tr>
+                <tr>
+                  <td class="mono">class E&lt;T&gt; extends Exception</td>
+                  <td>catch needs an exact runtime type</td>
+                  <td>use a non-generic exception</td>
+                </tr>
+                <tr>
+                  <td class="mono">
+                    f(List&lt;String&gt;) + f(List&lt;Integer&gt;)
+                  </td>
+                  <td>Both erase to f(List)</td>
+                  <td>rename one method</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Heap pollution and <code>@SafeVarargs</code></h3>
+          <p>
+            A generic varargs parameter secretly creates an array of a
+            non-reifiable type, which the compiler cannot fully guarantee. Hence
+            the warning — and the annotation that silences it once you've
+            checked.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// warning: possible heap pollution from parameterized vararg type T</span>
+<span class="k">static</span> &lt;<span class="t">T</span>&gt; <span class="t">List</span>&lt;<span class="t">T</span>&gt; listOf(<span class="t">T</span>... items) { <span class="k">return</span> <span class="t">Arrays</span>.asList(items); }
+
+<span class="c">// Safe ONLY if you never write into the array and never let it escape.</span>
+<span class="k">@SafeVarargs</span>
+<span class="k">static</span> &lt;<span class="t">T</span>&gt; <span class="t">List</span>&lt;<span class="t">T</span>&gt; listOf(<span class="t">T</span>... items) { <span class="k">return</span> <span class="t">List</span>.of(items); }</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">The annotation is a promise, not a check</span>
+            <p>
+              <code>@SafeVarargs</code> suppresses the warning without verifying
+              anything. If the method stores the array somewhere or hands it
+              out, you've silenced a real warning and bought yourself a
+              <code>ClassCastException</code> in unrelated code later. It's
+              allowed only on <code>static</code>, <code>final</code>, or
+              <code>private</code> methods — precisely because those can't be
+              overridden into something unsafe.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ ARRAYS ============ -->
+        <section id="arrays">
+          <h2>Arrays vs generics</h2>
+          <p class="lede">
+            They behave in opposite ways, and mixing them is where the sharpest
+            edges live. Arrays remember their type at runtime; generics don't.
+            Arrays are covariant; generics aren't.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 200"
+                role="img"
+                aria-label="An array of strings assigned to an object array accepts a wrong write and fails at runtime, while the generic equivalent is rejected at compile time"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="18" font-size="11" fill="var(--hot)">
+                    ARRAYS — covariant, and reified
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="320"
+                    height="86"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text x="28" y="52" font-size="11" fill="var(--ink)">
+                    String[] s = new String[2];
+                  </text>
+                  <text x="28" y="72" font-size="11" fill="var(--good)">
+                    Object[] o = s; // allowed!
+                  </text>
+                  <text x="28" y="92" font-size="11" fill="var(--hot)">
+                    o[0] = 42; // ArrayStoreException
+                  </text>
+                  <text x="12" y="134" font-size="10.5" fill="var(--ink-soft)">
+                    Compiles fine. Blows up at runtime,
+                  </text>
+                  <text x="12" y="150" font-size="10.5" fill="var(--ink-soft)">
+                    because the array knows it's a String[].
+                  </text>
+
+                  <text x="366" y="18" font-size="11" fill="var(--val)">
+                    GENERICS — invariant, and erased
+                  </text>
+                  <rect
+                    x="366"
+                    y="28"
+                    width="320"
+                    height="86"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text x="382" y="52" font-size="11" fill="var(--ink)">
+                    List&lt;String&gt; s = new ArrayList&lt;&gt;();
+                  </text>
+                  <text x="382" y="72" font-size="11" fill="var(--hot)">
+                    List&lt;Object&gt; o = s; // ✗ won't compile
+                  </text>
+                  <text x="382" y="92" font-size="11" fill="var(--ink-faint)">
+                    — no runtime failure is possible
+                  </text>
+                  <text x="366" y="134" font-size="10.5" fill="var(--ink-soft)">
+                    Refused at the gate. The bad state
+                  </text>
+                  <text x="366" y="150" font-size="10.5" fill="var(--ink-soft)">
+                    is unreachable rather than detected.
+                  </text>
+
+                  <text
+                    x="12"
+                    y="184"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Same mistake, two philosophies: arrays catch it late and
+                    loudly, generics prevent it early and quietly.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Don't create arrays of generic types.</b>
+              <code>new List&lt;String&gt;[10]</code> is illegal outright; the
+              <code>(T[]) new Object[n]</code> cast is the standard workaround,
+              and it's what <code>ArrayList</code> itself does internally.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ RAW ============ -->
+        <section id="raw">
+          <h2>Raw types</h2>
+          <p class="lede">
+            Using a generic type with no type argument. It compiles, it warns,
+            and it switches off checking for the whole expression — including
+            parts that look unrelated.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">List</span> raw = <span class="k">new</span> <span class="t">ArrayList</span>();       <span class="c">// raw — legal, for 1.4 compatibility only</span>
+raw.add(<span class="s">"anything"</span>);
+raw.add(<span class="n">42</span>);                        <span class="c">// nobody objects</span>
+
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; typed = raw;          <span class="c">// unchecked warning — the poison enters here</span>
+<span class="t">String</span> s = typed.get(<span class="n">1</span>);            <span class="c">// ClassCastException at runtime</span>
+
+<span class="c">// If you genuinely mean "a list of unknown element type", say so:</span>
+<span class="t">List</span>&lt;?&gt; unknown = <span class="k">new</span> <span class="t">ArrayList</span>&lt;<span class="t">String</span>&gt;();   <span class="c">// safe, and checked</span></pre>
+          </div>
+
+          <p>
+            The difference matters: <code>List</code> means "I have opted out of
+            type checking"; <code>List&lt;?&gt;</code> means "the element type
+            is unknown, so protect me from writing the wrong thing". The second
+            is safe, the first is not.
+          </p>
+
+          <div class="note">
+            <span class="tag">Treat unchecked warnings as errors</span>
+            <p>
+              Compile with <code>-Xlint:unchecked</code>. Every unchecked
+              warning marks a spot where the compiler has stopped being able to
+              help you, and where a <code>ClassCastException</code> can appear
+              in code that looks entirely innocent. Where a cast is genuinely
+              provable, narrow the suppression to the smallest possible scope
+              and leave a comment saying why it's safe.
+            </p>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Narrow, justified, documented — the only acceptable form</span>
+<span class="k">@SuppressWarnings</span>(<span class="s">"unchecked"</span>)   <span class="c">// safe: the map only ever holds String values</span>
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; result = (<span class="t">List</span>&lt;<span class="t">String</span>&gt;) cache.get(key);</pre>
+          </div>
+        </section>
+
+        <!-- ============ CHEAT ============ -->
+        <section id="cheat">
+          <h2>Cheat sheet</h2>
+
+          <h4>Choosing a form</h4>
+          <ul class="pick">
+            <li>
+              <span class="want">A container of one known type</span
+              ><span class="use">Box&lt;T&gt;</span>
+            </li>
+            <li>
+              <span class="want">A parameter I only read from</span
+              ><span class="use">? extends T</span>
+            </li>
+            <li>
+              <span class="want">A parameter I only write into</span
+              ><span class="use">? super T</span>
+            </li>
+            <li>
+              <span class="want">A parameter I read <em>and</em> write</span
+              ><span class="use">plain T</span>
+            </li>
+            <li>
+              <span class="want"
+                >I don't care about the element type at all</span
+              ><span class="use">List&lt;?&gt;</span>
+            </li>
+            <li>
+              <span class="want">T needs a capability</span
+              ><span class="use">T extends Number</span>
+            </li>
+            <li>
+              <span class="want">T compared against its own kind</span
+              ><span class="use">T extends Comparable&lt;T&gt;</span>
+            </li>
+            <li>
+              <span class="want">Two types that vary together</span
+              ><span class="use">&lt;K, V&gt;</span>
+            </li>
+          </ul>
+
+          <h4>Compile time vs runtime</h4>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Question</th>
+                  <th>At compile time</th>
+                  <th>At runtime</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Is this a <code>List&lt;String&gt;</code>?</td>
+                  <td class="y">known and enforced</td>
+                  <td class="n">unknowable</td>
+                </tr>
+                <tr>
+                  <td>Can I add an <code>Integer</code> to it?</td>
+                  <td class="y">refused</td>
+                  <td class="n">nothing checks</td>
+                </tr>
+                <tr>
+                  <td>What is <code>T</code> here?</td>
+                  <td class="y">a real type</td>
+                  <td class="mid">its bound, usually Object</td>
+                </tr>
+                <tr>
+                  <td>Are the casts gone?</td>
+                  <td class="y">you wrote none</td>
+                  <td class="mid">compiler inserted them</td>
+                </tr>
+                <tr>
+                  <td>Does a field's type argument survive?</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes — in metadata</td>
+                </tr>
+                <tr>
+                  <td>Does a local's type argument survive?</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>
+            Assuming <code>Box&lt;Dog&gt;</code> is a
+            <code>Box&lt;Animal&gt;</code>
+          </h3>
+          <p>
+            The most common generics compile error, and the one people fight
+            rather than understand. It isn't the compiler being pedantic — see
+            the banana in Part&nbsp;6. When you want the flexibility, ask for it
+            explicitly with a wildcard.
+          </p>
+
+          <h3>Reaching for a wildcard when a type parameter is right</h3>
+          <div class="code">
+            <pre><span class="c">// ✗ Two independent unknowns — nothing ties them together</span>
+<span class="k">static void</span> copy(<span class="t">List</span>&lt;?&gt; dst, <span class="t">List</span>&lt;?&gt; src) { <span class="c">/* can't write into dst */</span> }
+
+<span class="c">// ✓ One named type relates both sides</span>
+<span class="k">static</span> &lt;<span class="t">T</span>&gt; <span class="k">void</span> copy(<span class="t">List</span>&lt;? <span class="k">super</span> <span class="t">T</span>&gt; dst, <span class="t">List</span>&lt;? <span class="k">extends</span> <span class="t">T</span>&gt; src) { … }</pre>
+          </div>
+          <p>
+            Rule of thumb: if a type appears in <strong>one</strong> place in
+            the signature, a wildcard is fine. If it appears in
+            <strong>two</strong> places that must agree, you need a named type
+            parameter.
+          </p>
+
+          <h3>Silencing warnings instead of reading them</h3>
+          <p>
+            A class-level <code>@SuppressWarnings("unchecked")</code> hides
+            every unchecked operation in the file, including ones added years
+            later by someone else. Put it on the smallest unit that works —
+            ideally a single local variable declaration.
+          </p>
+
+          <h3>Expecting overloads to distinguish type arguments</h3>
+          <p>
+            <code>process(List&lt;String&gt;)</code> and
+            <code>process(List&lt;Integer&gt;)</code> are the same method after
+            erasure, so the file won't compile. Give them different names —
+            <code>processNames</code> and <code>processIds</code> — which reads
+            better anyway.
+          </p>
+
+          <h3>Returning a wildcard</h3>
+          <p>
+            <code>List&lt;? extends Fruit&gt; getFruit()</code> forces every
+            caller into wildcard handling for no benefit. Return the concrete
+            parameterized type and keep the wildcards on your parameters.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Generics are checked thoroughly and then thrown away. Write the
+              strongest types you can at the boundaries, use
+              <code>extends</code> and <code>super</code> to widen what callers
+              may pass, never suppress a warning you haven't personally proven
+              safe — and remember that at runtime, every one of your carefully
+              typed collections is just a collection.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

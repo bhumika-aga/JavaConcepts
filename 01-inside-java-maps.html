@@ -1,0 +1,5429 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Java Maps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The idea</div>
+          <a href="#idea">What a Map is</a>
+          <a href="#trick">The one trick</a>
+          <div class="grp">The hash family</div>
+          <a href="#hashmap">HashMap</a>
+          <a href="#linkedhashmap">LinkedHashMap</a>
+          <a href="#hashtable">Hashtable</a>
+          <div class="grp">Sorted</div>
+          <a href="#treemap">TreeMap</a>
+          <div class="grp">Concurrent</div>
+          <a href="#chm">ConcurrentHashMap</a>
+          <a href="#skiplist">ConcurrentSkipListMap</a>
+          <div class="grp">Specialists</div>
+          <a href="#enummap">EnumMap</a>
+          <a href="#identity">IdentityHashMap</a>
+          <a href="#weak">WeakHashMap</a>
+          <a href="#immutable">Map.of</a>
+          <div class="grp">Reference</div>
+          <a href="#compare">Compare them all</a>
+          <a href="#pick">Which do I pick?</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">java.util.Map &middot; explained from zero</p>
+          <h1>Inside Java Maps</h1>
+          <p class="dek">
+            Every Map is a machine for answering one question fast:
+            <em>where did I put that?</em> Eleven implementations, eleven
+            different machines. Here is what each one actually does under the
+            lid.
+          </p>
+        </header>
+
+        <!-- ================= THE IDEA ================= -->
+        <section id="idea">
+          <h2>What a Map is</h2>
+          <p class="lede">
+            Imagine a wall of cubbies. Each cubby has a name tag on the front
+            and something inside. That's it. That's a Map.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 200"
+                role="img"
+                aria-label="Four cubbies, each with a name tag on top and a value inside"
+              >
+                <g font-family="JetBrains Mono, monospace">
+                  <!-- cubby 1 -->
+                  <rect
+                    x="16"
+                    y="54"
+                    width="150"
+                    height="118"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <rect
+                    x="34"
+                    y="24"
+                    width="114"
+                    height="30"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="91"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "alice"
+                  </text>
+                  <text
+                    x="91"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="15"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    age 31
+                  </text>
+                  <text
+                    x="91"
+                    y="132"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    the value
+                  </text>
+                  <!-- cubby 2 -->
+                  <rect
+                    x="192"
+                    y="54"
+                    width="150"
+                    height="118"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <rect
+                    x="210"
+                    y="24"
+                    width="114"
+                    height="30"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="267"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "bob"
+                  </text>
+                  <text
+                    x="267"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="15"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    age 47
+                  </text>
+                  <!-- cubby 3 -->
+                  <rect
+                    x="368"
+                    y="54"
+                    width="150"
+                    height="118"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <rect
+                    x="386"
+                    y="24"
+                    width="114"
+                    height="30"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="443"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "carol"
+                  </text>
+                  <text
+                    x="443"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="15"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    age 29
+                  </text>
+                  <!-- cubby 4 empty -->
+                  <rect
+                    x="544"
+                    y="54"
+                    width="140"
+                    height="118"
+                    rx="8"
+                    fill="none"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    stroke-dasharray="6 5"
+                  />
+                  <text
+                    x="614"
+                    y="118"
+                    text-anchor="middle"
+                    font-size="13"
+                    fill="var(--ink-faint)"
+                  >
+                    empty
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>A Map is a wall of cubbies.</b> The name tag is the
+              <span style="color: var(--key)">key</span>. What's inside is the
+              <span style="color: var(--val)">value</span>. Give it a tag, get
+              the contents back.
+            </figcaption>
+          </figure>
+
+          <p>
+            The whole interface is small. You put things in, you get things out,
+            and you ask whether something is there.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; ages = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+
+ages.put(<span class="s">"alice"</span>, <span class="n">31</span>);        <span class="c">// hang a tag, fill the cubby</span>
+ages.get(<span class="s">"alice"</span>);            <span class="c">// → 31</span>
+ages.get(<span class="s">"nobody"</span>);           <span class="c">// → null (no such tag)</span>
+ages.containsKey(<span class="s">"bob"</span>);     <span class="c">// → false</span>
+ages.remove(<span class="s">"alice"</span>);         <span class="c">// → 31, and the cubby empties</span>
+ages.size();                    <span class="c">// → 0</span></pre>
+          </div>
+
+          <p>
+            Two rules hold for <em>every</em> Map in Java, no matter which one
+            you pick:
+          </p>
+          <ul>
+            <li>
+              <strong>Keys are unique.</strong> Putting
+              <code>"alice"</code> twice doesn't make two cubbies. The second
+              put overwrites the first and hands you back the old value.
+            </li>
+            <li>
+              <strong>Values are not.</strong> Ten different keys can all hold
+              the number <code>31</code>. Nobody minds.
+            </li>
+          </ul>
+
+          <p>
+            <code>Map</code> itself is just an <strong>interface</strong> — a
+            promise about what the methods do, with no machinery behind it. The
+            machinery is the implementation, and choosing one is the entire
+            subject of this page. They differ in how they find a cubby, whether
+            the cubbies stay in any order, and what happens when two threads
+            reach for the wall at once.
+          </p>
+        </section>
+
+        <!-- ================= THE TRICK ================= -->
+        <section id="trick">
+          <h2>The one trick behind hashing</h2>
+          <p class="lede">
+            Searching a thousand cubbies one at a time is slow. So most Maps
+            don't search at all — they <em>calculate</em> which cubby to open.
+          </p>
+
+          <p>
+            Every object in Java can produce a number about itself, via
+            <code>hashCode()</code>. Equal objects must produce equal numbers.
+            That number is a fingerprint — big, arbitrary, and useless as an
+            address on its own, because you don't have four billion cubbies. So
+            you fold it down to fit.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 860 190"
+                role="img"
+                aria-label="A key is hashed, spread, masked, and turned into a bucket index"
+              >
+                <defs>
+                  <marker
+                    id="ar"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="13">
+                  <!-- key -->
+                  <rect
+                    x="8"
+                    y="52"
+                    width="112"
+                    height="52"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="64"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="14"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "alice"
+                  </text>
+                  <text
+                    x="64"
+                    y="94"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    the key
+                  </text>
+                  <line
+                    x1="122"
+                    y1="78"
+                    x2="158"
+                    y2="78"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#ar)"
+                  />
+
+                  <!-- hashCode -->
+                  <rect
+                    x="162"
+                    y="52"
+                    width="152"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="238"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    hashCode()
+                  </text>
+                  <text
+                    x="238"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    92902992
+                  </text>
+                  <line
+                    x1="316"
+                    y1="78"
+                    x2="352"
+                    y2="78"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#ar)"
+                  />
+
+                  <!-- spread -->
+                  <rect
+                    x="356"
+                    y="52"
+                    width="168"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="440"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    h ^ (h &gt;&gt;&gt; 16)
+                  </text>
+                  <text
+                    x="440"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    stir the high bits down
+                  </text>
+                  <line
+                    x1="526"
+                    y1="78"
+                    x2="562"
+                    y2="78"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#ar)"
+                  />
+
+                  <!-- mask -->
+                  <rect
+                    x="566"
+                    y="52"
+                    width="132"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="632"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    &amp; (n - 1)
+                  </text>
+                  <text
+                    x="632"
+                    y="92"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    keep low bits
+                  </text>
+                  <line
+                    x1="700"
+                    y1="78"
+                    x2="736"
+                    y2="78"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#ar)"
+                  />
+
+                  <!-- bucket -->
+                  <rect
+                    x="740"
+                    y="46"
+                    width="112"
+                    height="64"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="796"
+                    y="72"
+                    text-anchor="middle"
+                    font-size="12"
+                    fill="var(--ink-soft)"
+                  >
+                    bucket
+                  </text>
+                  <text
+                    x="796"
+                    y="96"
+                    text-anchor="middle"
+                    font-size="20"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    6
+                  </text>
+
+                  <text
+                    x="430"
+                    y="160"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    fill="var(--ink-faint)"
+                  >
+                    one arithmetic pass — no searching, no comparing, no walking
+                    the wall
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Address arithmetic, not searching.</b> The key computes its own
+              cubby number. That is why a <code>HashMap</code> lookup costs the
+              same whether it holds ten entries or ten million.
+            </figcaption>
+          </figure>
+
+          <h3>Why the extra stirring step?</h3>
+          <p>
+            The final <code>&amp; (n - 1)</code> is a cheap replacement for a
+            modulo, and it works only because table sizes are always powers of
+            two. But it has a flaw: it throws away every bit above the low few.
+            If a set of keys differs only in its <em>high</em> bits, they'd all
+            land in the same cubby.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 236"
+                role="img"
+                aria-label="The high 16 bits of a hash are XOR-ed into the low 16 bits before masking"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <text x="12" y="26" font-size="11" fill="var(--ink-faint)">
+                    RAW HASH (32 bits)
+                  </text>
+                  <rect
+                    x="12"
+                    y="34"
+                    width="330"
+                    height="34"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="177"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    1011 0010 1110 0101
+                  </text>
+                  <text
+                    x="177"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    high 16 — thrown away by the mask
+                  </text>
+
+                  <rect
+                    x="350"
+                    y="34"
+                    width="330"
+                    height="34"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="515"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    0001 1100 0110 1010
+                  </text>
+                  <text
+                    x="515"
+                    y="84"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    low 16 — the only part that counts
+                  </text>
+
+                  <path
+                    d="M177 96 C177 120, 515 106, 515 128"
+                    fill="none"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <circle
+                    cx="515"
+                    cy="132"
+                    r="13"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="515"
+                    y="137"
+                    text-anchor="middle"
+                    font-size="13"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    ^
+                  </text>
+                  <text
+                    x="330"
+                    y="112"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    XOR down
+                  </text>
+
+                  <text x="12" y="176" font-size="11" fill="var(--ink-faint)">
+                    SPREAD HASH — high bits now influence the low ones
+                  </text>
+                  <rect
+                    x="12"
+                    y="184"
+                    width="668"
+                    height="34"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="346"
+                    y="206"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    1011 0010 1110 0101 &nbsp;&nbsp; 1010 1110 1000 1111
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>One XOR buys a lot of safety.</b>
+              <code>h ^ (h &gt;&gt;&gt; 16)</code> mixes the discarded high half
+              into the half that survives, so keys that differ only up top still
+              scatter. It costs a single instruction.
+            </figcaption>
+          </figure>
+
+          <div class="note">
+            <span class="tag">The contract you must not break</span>
+            <p>
+              If <code>a.equals(b)</code>, then
+              <code>a.hashCode() == b.hashCode()</code> — always. Break it and
+              your key vanishes: you store with one fingerprint, look up with
+              another, and the Map opens an empty cubby. This is the single most
+              common Map bug in Java, and it is completely silent.
+            </p>
+          </div>
+        </section>
+
+        <!-- ================= HASHMAP ================= -->
+        <section id="hashmap">
+          <h2>HashMap</h2>
+          <p class="lede">
+            The default. An array of buckets, a chain in each bucket, and a
+            red-black tree if a chain gets embarrassing.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Array + chains + trees</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>None guaranteed</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="yes">One allowed</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) average</dd>
+            </div>
+          </dl>
+
+          <h3>The shape of it</h3>
+          <p>
+            Inside is one array, <code>Node&lt;K,V&gt;[] table</code>. Each slot
+            is a <strong>bucket</strong>. Each bucket holds a chain of nodes,
+            and each node carries four things: the cached hash, the key, the
+            value, and a pointer to the next node in the chain.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 330"
+                role="img"
+                aria-label="A bucket array of eight slots, with a three-node collision chain hanging off slot 5"
+              >
+                <defs>
+                  <marker
+                    id="ar2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    table (length 8)
+                  </text>
+
+                  <!-- slots -->
+                  <g>
+                    <rect
+                      x="12"
+                      y="30"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="52"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      0
+                    </text>
+                    <text
+                      x="76"
+                      y="52"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                      text-anchor="middle"
+                    >
+                      null
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="66"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="88"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      1
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="102"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="124"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      2
+                    </text>
+                    <text
+                      x="76"
+                      y="124"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                      text-anchor="middle"
+                    >
+                      null
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="138"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--val-bg)"
+                      stroke="var(--val)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="160"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      3
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="174"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="196"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      4
+                    </text>
+                    <text
+                      x="76"
+                      y="196"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                      text-anchor="middle"
+                    >
+                      null
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="210"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="2"
+                    />
+                    <text
+                      x="26"
+                      y="232"
+                      font-size="11.5"
+                      font-weight="700"
+                      fill="var(--hot)"
+                    >
+                      5
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="246"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="268"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      6
+                    </text>
+                    <text
+                      x="76"
+                      y="268"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                      text-anchor="middle"
+                    >
+                      null
+                    </text>
+
+                    <rect
+                      x="12"
+                      y="282"
+                      width="86"
+                      height="34"
+                      rx="4"
+                      fill="var(--surface-2)"
+                      stroke="var(--rule-strong)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="26"
+                      y="304"
+                      font-size="11.5"
+                      fill="var(--ink-faint)"
+                    >
+                      7
+                    </text>
+                    <text
+                      x="76"
+                      y="304"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                      text-anchor="middle"
+                    >
+                      null
+                    </text>
+                  </g>
+
+                  <!-- single entries -->
+                  <line
+                    x1="100"
+                    y1="83"
+                    x2="132"
+                    y2="83"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar2)"
+                  />
+                  <rect
+                    x="136"
+                    y="66"
+                    width="150"
+                    height="34"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="211"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    <tspan fill="var(--key)">"bob"</tspan>
+                    →
+                    <tspan fill="var(--val)">47</tspan>
+                  </text>
+
+                  <line
+                    x1="100"
+                    y1="155"
+                    x2="132"
+                    y2="155"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar2)"
+                  />
+                  <rect
+                    x="136"
+                    y="138"
+                    width="150"
+                    height="34"
+                    rx="5"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="211"
+                    y="160"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    <tspan fill="var(--key)">"carol"</tspan>
+                    →
+                    <tspan fill="var(--val)">29</tspan>
+                  </text>
+
+                  <!-- collision chain -->
+                  <line
+                    x1="100"
+                    y1="227"
+                    x2="132"
+                    y2="227"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    marker-end="url(#ar2)"
+                  />
+                  <rect
+                    x="136"
+                    y="210"
+                    width="146"
+                    height="34"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="209"
+                    y="232"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    <tspan fill="var(--key)">"alice"</tspan>
+                    →
+                    <tspan fill="var(--val)">31</tspan>
+                  </text>
+                  <line
+                    x1="284"
+                    y1="227"
+                    x2="308"
+                    y2="227"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    marker-end="url(#ar2)"
+                  />
+                  <rect
+                    x="312"
+                    y="210"
+                    width="146"
+                    height="34"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="385"
+                    y="232"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    <tspan fill="var(--key)">"dan"</tspan>
+                    →
+                    <tspan fill="var(--val)">52</tspan>
+                  </text>
+                  <line
+                    x1="460"
+                    y1="227"
+                    x2="484"
+                    y2="227"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    marker-end="url(#ar2)"
+                  />
+                  <rect
+                    x="488"
+                    y="210"
+                    width="146"
+                    height="34"
+                    rx="5"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="561"
+                    y="232"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    <tspan fill="var(--key)">"eve"</tspan>
+                    →
+                    <tspan fill="var(--val)">18</tspan>
+                  </text>
+                  <text x="636" y="232" font-size="11" fill="var(--ink-faint)">
+                    null
+                  </text>
+
+                  <text
+                    x="136"
+                    y="268"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    a collision
+                  </text>
+                  <text x="136" y="286" font-size="11" fill="var(--ink-faint)">
+                    three keys, same bucket — walk the chain and compare with
+                    equals()
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Collisions are normal, not exceptional.</b> Different keys
+              legitimately land in the same bucket. The Map then walks the short
+              chain, comparing cached hashes first (cheap) and only calling
+              <code>equals()</code> on a hash match.
+            </figcaption>
+          </figure>
+
+          <h3>When a chain gets too long, it becomes a tree</h3>
+          <p>
+            A long chain destroys the O(1) promise — walking 500 nodes is just a
+            slow linked list. So since Java&nbsp;8, <code>HashMap</code> watches
+            its chains. When one reaches <strong>8 nodes</strong>
+            <em>and</em> the table is at least <strong>64</strong> slots long,
+            that bucket converts into a <strong>red-black tree</strong>, and the
+            worst case improves from O(n) to O(log&nbsp;n).
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="A chain of eight nodes converting into a balanced red-black tree"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    CHAIN — 8 nodes, O(n) walk
+                  </text>
+                  <g>
+                    <rect
+                      x="12"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="52"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="92"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="132"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="172"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="212"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="252"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <rect
+                      x="292"
+                      y="32"
+                      width="34"
+                      height="30"
+                      rx="4"
+                      fill="var(--hot-bg)"
+                      stroke="var(--hot)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="169"
+                      y="80"
+                      text-anchor="middle"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                    >
+                      up to 8 comparisons
+                    </text>
+                  </g>
+
+                  <text
+                    x="360"
+                    y="52"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    treeify →
+                  </text>
+                  <text x="360" y="70" font-size="10.5" fill="var(--ink-faint)">
+                    at 8 nodes, table ≥ 64
+                  </text>
+
+                  <text x="460" y="20" font-size="11" fill="var(--ink-faint)">
+                    RED-BLACK TREE — O(log n)
+                  </text>
+                  <!-- tree -->
+                  <line
+                    x1="560"
+                    y1="52"
+                    x2="512"
+                    y2="98"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="560"
+                    y1="52"
+                    x2="608"
+                    y2="98"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="512"
+                    y1="112"
+                    x2="480"
+                    y2="152"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="512"
+                    y1="112"
+                    x2="544"
+                    y2="152"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="608"
+                    y1="112"
+                    x2="576"
+                    y2="152"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <line
+                    x1="608"
+                    y1="112"
+                    x2="640"
+                    y2="152"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <circle
+                    cx="560"
+                    cy="52"
+                    r="15"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="512"
+                    cy="106"
+                    r="15"
+                    fill="var(--hot)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="608"
+                    cy="106"
+                    r="15"
+                    fill="var(--hot)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="480"
+                    cy="160"
+                    r="14"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="544"
+                    cy="160"
+                    r="14"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="576"
+                    cy="160"
+                    r="14"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="640"
+                    cy="160"
+                    r="14"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="560"
+                    y="204"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    3 comparisons, worst case
+                  </text>
+                  <text x="12" y="232" font-size="10.5" fill="var(--ink-faint)">
+                    ordered by hash, then by Comparable, then by identity as a
+                    last resort
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Treeify at 8, untreeify at 6.</b> The gap between the two
+              thresholds is deliberate hysteresis — without it, a bucket
+              hovering at the boundary would convert back and forth on every
+              insert and remove.
+            </figcaption>
+          </figure>
+
+          <div class="note">
+            <span class="tag">The table ≥ 64 condition matters</span>
+            <p>
+              If a bucket hits 8 nodes while the table is still small,
+              <code>HashMap</code>
+              <strong>resizes instead of treeifying</strong>. A crowded small
+              table is a spreading problem, and doubling the array is the
+              cheaper fix. Trees are reserved for genuinely adversarial hash
+              distributions.
+            </p>
+          </div>
+
+          <h3>Growing: load factor and the doubling trick</h3>
+          <p>
+            A <code>HashMap</code> starts with capacity <strong>16</strong> and
+            a load factor of <strong>0.75</strong>, giving a threshold of 12.
+            Insert the 13th entry and the table doubles to 32. (The array itself
+            is allocated lazily, on the first <code>put</code> — a
+            <code>new HashMap&lt;&gt;()</code> that you never write to costs
+            almost nothing.)
+          </p>
+
+          <p>
+            Resizing sounds expensive, and here is the elegant part:
+            <strong>nothing is re-hashed</strong>. Because capacity is always a
+            power of two, doubling adds exactly one bit to the mask. Every entry
+            in old bucket <em>j</em> either stays at <em>j</em> or moves to
+            <em>j + oldCapacity</em> — decided by a single bit test,
+            <code>(hash &amp; oldCap) == 0</code>. Each chain splits cleanly
+            into a "low" list and a "high" list in one pass.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 260"
+                role="img"
+                aria-label="A bucket chain splitting into a low list and a high list when the table doubles"
+              >
+                <defs>
+                  <marker
+                    id="ar3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    BEFORE — capacity 16, bucket 3
+                  </text>
+                  <rect
+                    x="12"
+                    y="30"
+                    width="56"
+                    height="32"
+                    rx="4"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="40"
+                    y="51"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    3
+                  </text>
+                  <line
+                    x1="70"
+                    y1="46"
+                    x2="94"
+                    y2="46"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="98"
+                    y="30"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text x="129" y="51" text-anchor="middle" fill="var(--ink)">
+                    A
+                  </text>
+                  <line
+                    x1="162"
+                    y1="46"
+                    x2="182"
+                    y2="46"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="186"
+                    y="30"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text x="217" y="51" text-anchor="middle" fill="var(--ink)">
+                    B
+                  </text>
+                  <line
+                    x1="250"
+                    y1="46"
+                    x2="270"
+                    y2="46"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="274"
+                    y="30"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text x="305" y="51" text-anchor="middle" fill="var(--ink)">
+                    C
+                  </text>
+                  <line
+                    x1="338"
+                    y1="46"
+                    x2="358"
+                    y2="46"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="362"
+                    y="30"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text x="393" y="51" text-anchor="middle" fill="var(--ink)">
+                    D
+                  </text>
+
+                  <text
+                    x="450"
+                    y="42"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    test one bit:
+                  </text>
+                  <text x="450" y="58" font-size="11" fill="var(--ink-faint)">
+                    hash &amp; 16 == 0 ?
+                  </text>
+
+                  <line
+                    x1="200"
+                    y1="76"
+                    x2="200"
+                    y2="104"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                    marker-end="url(#ar3)"
+                  />
+
+                  <text x="12" y="132" font-size="11" fill="var(--ink-faint)">
+                    AFTER — capacity 32, one pass, zero re-hashing
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="144"
+                    width="56"
+                    height="32"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="40"
+                    y="165"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    3
+                  </text>
+                  <line
+                    x1="70"
+                    y1="160"
+                    x2="94"
+                    y2="160"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="98"
+                    y="144"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="129" y="165" text-anchor="middle" fill="var(--ink)">
+                    A
+                  </text>
+                  <line
+                    x1="162"
+                    y1="160"
+                    x2="182"
+                    y2="160"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="186"
+                    y="144"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="217" y="165" text-anchor="middle" fill="var(--ink)">
+                    C
+                  </text>
+                  <text x="262" y="165" font-size="11" fill="var(--ink-faint)">
+                    "lo" list — stays at 3
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="196"
+                    width="56"
+                    height="32"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="40"
+                    y="217"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    19
+                  </text>
+                  <line
+                    x1="70"
+                    y1="212"
+                    x2="94"
+                    y2="212"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="98"
+                    y="196"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text x="129" y="217" text-anchor="middle" fill="var(--ink)">
+                    B
+                  </text>
+                  <line
+                    x1="162"
+                    y1="212"
+                    x2="182"
+                    y2="212"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar3)"
+                  />
+                  <rect
+                    x="186"
+                    y="196"
+                    width="62"
+                    height="32"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text x="217" y="217" text-anchor="middle" fill="var(--ink)">
+                    D
+                  </text>
+                  <text x="262" y="217" font-size="11" fill="var(--ink-faint)">
+                    "hi" list — moves to 3 + 16 = 19
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Doubling is a bit test, not a re-hash.</b> This is the reason
+              <code>HashMap</code> insists on power-of-two capacities — pass
+              <code>new HashMap&lt;&gt;(1000)</code> and it quietly rounds up to
+              1024.
+            </figcaption>
+          </figure>
+
+          <h3>Seeing it work</h3>
+          <div class="code">
+            <pre><span class="c">// Two keys engineered to collide: "Aa" and "BB" have the SAME hashCode.</span>
+<span class="t">System</span>.out.println(<span class="s">"Aa"</span>.hashCode());   <span class="c">// 2112</span>
+<span class="t">System</span>.out.println(<span class="s">"BB"</span>.hashCode());   <span class="c">// 2112</span>
+
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; m = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+m.put(<span class="s">"Aa"</span>, <span class="s">"first"</span>);
+m.put(<span class="s">"BB"</span>, <span class="s">"second"</span>);
+
+<span class="c">// Same bucket, but BOTH survive — equals() tells them apart.</span>
+<span class="t">System</span>.out.println(m.size());        <span class="c">// 2</span>
+<span class="t">System</span>.out.println(m.get(<span class="s">"Aa"</span>));   <span class="c">// "first"</span>
+
+<span class="c">// Sizing up front avoids repeated doubling.</span>
+<span class="c">// Want room for 1000 without a resize? 1000 / 0.75 = 1334.</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; sized = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;(<span class="n">1334</span>);
+
+<span class="c">// Java 19+ does the arithmetic for you:</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">String</span>&gt; better = <span class="t">HashMap</span>.newHashMap(<span class="n">1000</span>);</pre>
+          </div>
+
+          <p>
+            The methods worth knowing, because they turn three lines into one
+            and do it atomically-ish in a single bucket visit:
+          </p>
+
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">List</span>&lt;<span class="t">String</span>&gt;&gt; index = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+
+<span class="c">// The grouping idiom — creates the list only if absent.</span>
+index.computeIfAbsent(<span class="s">"fruit"</span>, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(<span class="s">"apple"</span>);
+index.computeIfAbsent(<span class="s">"fruit"</span>, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(<span class="s">"pear"</span>);
+<span class="c">// → {fruit=[apple, pear]}</span>
+
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; counts = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+<span class="k">for</span> (<span class="t">String</span> word : words) {
+    counts.merge(word, <span class="n">1</span>, <span class="t">Integer</span>::sum);   <span class="c">// the counting idiom</span>
+}
+
+counts.getOrDefault(<span class="s">"missing"</span>, <span class="n">0</span>);          <span class="c">// no null check needed</span>
+counts.putIfAbsent(<span class="s">"seed"</span>, <span class="n">0</span>);              <span class="c">// only if not there</span></pre>
+          </div>
+        </section>
+
+        <!-- ================= LINKEDHASHMAP ================= -->
+        <section id="linkedhashmap">
+          <h2>LinkedHashMap</h2>
+          <p class="lede">
+            A HashMap that also remembers what order things arrived in — by
+            threading a second, independent list through the same nodes.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>HashMap + linked list</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>Insertion, or access</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="yes">One allowed</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) average</dd>
+            </div>
+          </dl>
+
+          <p>
+            It literally <code>extends HashMap</code>. All the bucket machinery
+            above is inherited unchanged. The only addition is two extra
+            pointers per node — <code>before</code> and <code>after</code> —
+            plus a <code>head</code> and <code>tail</code> on the map itself.
+            The buckets decide <em>where things live</em>; the linked list
+            decides <em>what order you see them in</em>. The two are completely
+            independent.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 280"
+                role="img"
+                aria-label="Bucket array with a separate doubly-linked list threading through the entries in insertion order"
+              >
+                <defs>
+                  <marker
+                    id="ar4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    BUCKETS decide where an entry lives (scattered by hash)
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="34"
+                    width="46"
+                    height="30"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="35"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    0
+                  </text>
+                  <rect
+                    x="12"
+                    y="70"
+                    width="46"
+                    height="30"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="35"
+                    y="90"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    1
+                  </text>
+                  <rect
+                    x="12"
+                    y="106"
+                    width="46"
+                    height="30"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="35"
+                    y="126"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    2
+                  </text>
+                  <rect
+                    x="12"
+                    y="142"
+                    width="46"
+                    height="30"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="35"
+                    y="162"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    3
+                  </text>
+                  <rect
+                    x="12"
+                    y="178"
+                    width="46"
+                    height="30"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="35"
+                    y="198"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    4
+                  </text>
+
+                  <!-- nodes, positioned by bucket -->
+                  <line
+                    x1="60"
+                    y1="49"
+                    x2="94"
+                    y2="49"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="98"
+                    y="34"
+                    width="104"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="150" y="54" text-anchor="middle" fill="var(--ink)">
+                    "carol" 3rd
+                  </text>
+
+                  <line
+                    x1="60"
+                    y1="85"
+                    x2="94"
+                    y2="85"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="98"
+                    y="70"
+                    width="104"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="150" y="90" text-anchor="middle" fill="var(--ink)">
+                    "alice" 1st
+                  </text>
+
+                  <line
+                    x1="60"
+                    y1="157"
+                    x2="94"
+                    y2="157"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="98"
+                    y="142"
+                    width="104"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="150" y="162" text-anchor="middle" fill="var(--ink)">
+                    "dan" 4th
+                  </text>
+
+                  <line
+                    x1="60"
+                    y1="193"
+                    x2="94"
+                    y2="193"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="98"
+                    y="178"
+                    width="104"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="150" y="198" text-anchor="middle" fill="var(--ink)">
+                    "bob" 2nd
+                  </text>
+
+                  <!-- the overlay list -->
+                  <text
+                    x="250"
+                    y="20"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    THE SECOND LIST decides what order you see them in
+                  </text>
+                  <text x="250" y="38" font-size="10.5" fill="var(--ink-faint)">
+                    head → alice → bob → carol → dan → tail
+                  </text>
+
+                  <path
+                    d="M204 85 C258 85, 258 193, 202 193"
+                    fill="none"
+                    stroke="var(--key)"
+                    stroke-width="2.2"
+                    marker-end="url(#ar4)"
+                  />
+                  <path
+                    d="M204 193 C300 193, 300 49, 204 49"
+                    fill="none"
+                    stroke="var(--key)"
+                    stroke-width="2.2"
+                    marker-end="url(#ar4)"
+                  />
+                  <path
+                    d="M204 49 C340 49, 340 157, 204 157"
+                    fill="none"
+                    stroke="var(--key)"
+                    stroke-width="2.2"
+                    marker-end="url(#ar4)"
+                  />
+
+                  <text x="380" y="120" font-size="11.5" fill="var(--ink-soft)">
+                    Same nodes.
+                  </text>
+                  <text x="380" y="140" font-size="11.5" fill="var(--ink-soft)">
+                    Two independent
+                  </text>
+                  <text x="380" y="160" font-size="11.5" fill="var(--ink-soft)">
+                    sets of pointers.
+                  </text>
+
+                  <text x="12" y="240" font-size="11" fill="var(--ink-faint)">
+                    Iteration follows the amber path — insertion order — and
+                    never touches the buckets at all.
+                  </text>
+                  <text x="12" y="262" font-size="11" fill="var(--ink-faint)">
+                    That also makes iteration O(size) rather than O(capacity):
+                    no empty slots to skip.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Two structures, one set of nodes.</b> A plain
+              <code>HashMap</code> iterating a mostly-empty table has to walk
+              every slot. <code>LinkedHashMap</code> just follows its own list,
+              so iteration cost tracks the number of entries, not the capacity.
+            </figcaption>
+          </figure>
+
+          <h3>Access order: the free LRU cache</h3>
+          <p>
+            Flip one constructor flag and the list reorders itself on every
+            <code>get</code>, moving the touched entry to the end. Combine that
+            with an override of <code>removeEldestEntry</code> and you have a
+            bounded least-recently-used cache in about six lines.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Insertion order (default) — predictable iteration.</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; ordered = <span class="k">new</span> <span class="t">LinkedHashMap</span>&lt;&gt;();
+ordered.put(<span class="s">"c"</span>, <span class="n">3</span>); ordered.put(<span class="s">"a"</span>, <span class="n">1</span>); ordered.put(<span class="s">"b"</span>, <span class="n">2</span>);
+<span class="t">System</span>.out.println(ordered);        <span class="c">// {c=3, a=1, b=2} — always</span>
+
+<span class="c">// An LRU cache holding at most 3 entries.</span>
+<span class="c">// args: initialCapacity, loadFactor, accessOrder=true</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; lru = <span class="k">new</span> <span class="t">LinkedHashMap</span>&lt;&gt;(<span class="n">16</span>, <span class="n">0.75f</span>, <span class="k">true</span>) {
+    <span class="k">@Override protected boolean</span> removeEldestEntry(<span class="t">Map</span>.<span class="t">Entry</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; eldest) {
+        <span class="k">return</span> size() &gt; <span class="n">3</span>;      <span class="c">// evict once we exceed 3</span>
+    }
+};
+
+lru.put(<span class="s">"a"</span>, <span class="n">1</span>); lru.put(<span class="s">"b"</span>, <span class="n">2</span>); lru.put(<span class="s">"c"</span>, <span class="n">3</span>);
+lru.get(<span class="s">"a"</span>);                         <span class="c">// "a" jumps to the most-recent end</span>
+lru.put(<span class="s">"d"</span>, <span class="n">4</span>);                      <span class="c">// over the limit → evict eldest, which is "b"</span>
+<span class="t">System</span>.out.println(lru);            <span class="c">// {c=3, a=1, d=4}</span></pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Watch out</span>
+            <p>
+              In access-order mode, <code>get()</code> is a
+              <strong>structural modification</strong> — it mutates the list.
+              Two threads calling nothing but <code>get()</code> can still
+              corrupt this map, and iterating while calling
+              <code>get()</code> throws
+              <code>ConcurrentModificationException</code> on a single thread.
+            </p>
+          </div>
+        </section>
+
+        <!-- ================= HASHTABLE ================= -->
+        <section id="hashtable">
+          <h2>Hashtable</h2>
+          <p class="lede">
+            The 1996 original. Still in the JDK, still compiles, and you should
+            not use it.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Array + chains</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>None guaranteed</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="mid">Yes — badly</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) average</dd>
+            </div>
+          </dl>
+
+          <p>
+            It predates the collections framework entirely, and it shows. Three
+            differences from <code>HashMap</code> tell the whole story:
+          </p>
+
+          <ul>
+            <li>
+              <strong>Every method is <code>synchronized</code></strong> on the
+              whole table. Two threads reading unrelated keys still queue behind
+              each other. This is the reason it's obsolete — the safety is real
+              but the granularity is hopeless.
+            </li>
+            <li>
+              <strong>Capacity is 11 and grows to <code>2n + 1</code></strong
+              >, not a power of two. So the index is a real modulo —
+              <code>(hash &amp; 0x7FFFFFFF) % table.length</code> — where the
+              mask exists only to force the value positive. Integer division per
+              lookup, versus <code>HashMap</code>'s single AND.
+            </li>
+            <li>
+              <strong>No nulls anywhere.</strong> Neither keys nor values.
+            </li>
+          </ul>
+
+          <p>
+            It never got the tree optimization either — a degenerate bucket
+            stays a linked list forever.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Don't. But if you inherit it, this is what it does:</span>
+<span class="t">Hashtable</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; t = <span class="k">new</span> <span class="t">Hashtable</span>&lt;&gt;();
+t.put(<span class="s">"a"</span>, <span class="n">1</span>);
+t.put(<span class="k">null</span>, <span class="n">1</span>);      <span class="c">// NullPointerException</span>
+t.put(<span class="s">"b"</span>, <span class="k">null</span>);    <span class="c">// NullPointerException</span>
+
+<span class="c">// Need a thread-safe map? Use this instead:</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; good = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();</pre>
+          </div>
+
+          <p>
+            <code>Properties</code> extends <code>Hashtable</code>, which is why
+            that class also behaves oddly. That's the main reason the JDK can
+            never quite delete it.
+          </p>
+        </section>
+
+        <!-- ================= TREEMAP ================= -->
+        <section id="treemap">
+          <h2>TreeMap</h2>
+          <p class="lede">
+            No hashing at all. Keys live in a self-balancing binary search tree,
+            permanently sorted, and that unlocks a whole category of questions
+            the hash maps simply cannot answer.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Red-black tree</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>Sorted by key</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">NPE by default</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(log n) always</dd>
+            </div>
+          </dl>
+
+          <p>
+            Each node holds a key, a value, pointers to left child, right child,
+            and parent, plus one bit of colour. Everything smaller than a node
+            sits in its left subtree; everything larger sits to the right.
+            Lookup is descent: compare, go left or right, repeat.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 270"
+                role="img"
+                aria-label="A red-black tree of names with the search path to a key highlighted"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <!-- edges -->
+                  <line
+                    x1="350"
+                    y1="56"
+                    x2="200"
+                    y2="112"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <line
+                    x1="350"
+                    y1="56"
+                    x2="500"
+                    y2="112"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="200"
+                    y1="126"
+                    x2="120"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="200"
+                    y1="126"
+                    x2="280"
+                    y2="182"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <line
+                    x1="500"
+                    y1="126"
+                    x2="430"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="500"
+                    y1="126"
+                    x2="580"
+                    y2="182"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <!-- nodes -->
+                  <ellipse
+                    cx="350"
+                    cy="56"
+                    rx="46"
+                    ry="21"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="350"
+                    y="61"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    "dan"
+                  </text>
+
+                  <ellipse
+                    cx="200"
+                    cy="119"
+                    rx="46"
+                    ry="21"
+                    fill="var(--hot)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="200"
+                    y="124"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--bg)"
+                  >
+                    "bob"
+                  </text>
+
+                  <ellipse
+                    cx="500"
+                    cy="119"
+                    rx="50"
+                    ry="21"
+                    fill="var(--hot)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="500"
+                    y="124"
+                    text-anchor="middle"
+                    font-size="12.5"
+                    font-weight="700"
+                    fill="var(--bg)"
+                  >
+                    "frank"
+                  </text>
+
+                  <ellipse
+                    cx="120"
+                    cy="189"
+                    rx="48"
+                    ry="20"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="120"
+                    y="194"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    "alice"
+                  </text>
+
+                  <ellipse
+                    cx="280"
+                    cy="189"
+                    rx="48"
+                    ry="20"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="280"
+                    y="194"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    "carol"
+                  </text>
+
+                  <ellipse
+                    cx="430"
+                    cy="189"
+                    rx="42"
+                    ry="20"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="430"
+                    y="194"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    "eve"
+                  </text>
+
+                  <ellipse
+                    cx="580"
+                    cy="189"
+                    rx="42"
+                    ry="20"
+                    fill="var(--ink)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="580"
+                    y="194"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    "gina"
+                  </text>
+
+                  <text
+                    x="12"
+                    y="26"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    get("carol") — two comparisons, then done
+                  </text>
+                  <text x="12" y="240" font-size="11" fill="var(--ink-faint)">
+                    "carol" &lt; "dan" → go left. &nbsp; "carol" &gt; "bob" → go
+                    right. &nbsp; Found.
+                  </text>
+                  <text x="12" y="260" font-size="11" fill="var(--ink-faint)">
+                    Red/black colouring keeps the tree from degenerating into a
+                    list — height stays ≤ 2·log₂(n+1).
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Sorted by construction.</b> Iterating a <code>TreeMap</code> is
+              an in-order walk, so entries come out in key order for free. The
+              price is O(log&nbsp;n) on every single operation, including
+              <code>get</code> — there is no O(1) path.
+            </figcaption>
+          </figure>
+
+          <h3>What sorting buys you</h3>
+          <p>
+            This is the real reason to reach for <code>TreeMap</code>. Because
+            keys are ordered, you can ask <em>relative</em> questions — nearest,
+            next, everything between — that a hash map has no way to answer
+            short of scanning everything.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">TreeMap</span>&lt;<span class="t">Integer</span>, <span class="t">String</span>&gt; grades = <span class="k">new</span> <span class="t">TreeMap</span>&lt;&gt;();
+grades.put(<span class="n">60</span>, <span class="s">"D"</span>); grades.put(<span class="n">70</span>, <span class="s">"C"</span>);
+grades.put(<span class="n">80</span>, <span class="s">"B"</span>); grades.put(<span class="n">90</span>, <span class="s">"A"</span>);
+
+<span class="c">// Nearest-match lookups — the killer feature.</span>
+grades.floorEntry(<span class="n">85</span>);      <span class="c">// 80=B  (greatest key ≤ 85)</span>
+grades.ceilingEntry(<span class="n">85</span>);    <span class="c">// 90=A  (least key ≥ 85)</span>
+grades.lowerKey(<span class="n">80</span>);        <span class="c">// 70    (strictly less)</span>
+grades.higherKey(<span class="n">80</span>);       <span class="c">// 90    (strictly greater)</span>
+
+<span class="c">// Ends and ranges.</span>
+grades.firstKey();            <span class="c">// 60</span>
+grades.lastEntry();           <span class="c">// 90=A</span>
+grades.headMap(<span class="n">80</span>);         <span class="c">// {60=D, 70=C}      — a live view, not a copy</span>
+grades.subMap(<span class="n">70</span>, <span class="k">true</span>, <span class="n">85</span>, <span class="k">true</span>);  <span class="c">// {70=C, 80=B}</span>
+grades.descendingMap();       <span class="c">// {90=A, 80=B, 70=C, 60=D}</span>
+
+<span class="c">// Queue-like removal from either end.</span>
+grades.pollFirstEntry();      <span class="c">// removes and returns 60=D</span>
+
+<span class="c">// Custom ordering — the comparator replaces natural order entirely.</span>
+<span class="t">TreeMap</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; ci =
+    <span class="k">new</span> <span class="t">TreeMap</span>&lt;&gt;(<span class="t">String</span>.CASE_INSENSITIVE_ORDER);
+ci.put(<span class="s">"Apple"</span>, <span class="n">1</span>);
+ci.get(<span class="s">"APPLE"</span>);              <span class="c">// 1 — comparator decides equality, not equals()</span></pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Ordering defines identity here</span>
+            <p>
+              <code>TreeMap</code> never calls <code>equals()</code> or
+              <code>hashCode()</code>. Two keys are "the same key" precisely
+              when <code>compareTo</code> (or your comparator) returns
+              <code>0</code>. A comparator inconsistent with
+              <code>equals</code> gives you a Map that misbehaves in ways no
+              debugger will make obvious — as the case-insensitive example above
+              shows, where <code>"APPLE"</code> finds an entry stored under
+              <code>"Apple"</code>.
+            </p>
+          </div>
+
+          <p>
+            The null rule follows from the same fact: sorting a key means
+            comparing it, and comparing <code>null</code> throws. So
+            <code>put(null, v)</code> is an NPE unless you supplied a comparator
+            that tolerates nulls.
+          </p>
+        </section>
+
+        <!-- ================= CONCURRENTHASHMAP ================= -->
+        <section id="chm">
+          <h2>ConcurrentHashMap</h2>
+          <p class="lede">
+            The one to reach for when threads are involved. It doesn't lock the
+            map — it locks a single bucket, and often not even that.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Array + chains + trees</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>None guaranteed</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="yes">Yes — per bucket</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1), lock-free</dd>
+            </div>
+          </dl>
+
+          <p>
+            Structurally it's a <code>HashMap</code>: same bucket array, same
+            chains, same treeify-at-8. The difference is entirely in how writes
+            are coordinated.
+          </p>
+
+          <ul>
+            <li>
+              <strong>Reads take no lock at all.</strong> The table and the node
+              <code>next</code>/<code>value</code> fields are
+              <code>volatile</code>, so <code>get()</code> is a plain read that
+              sees a consistent, recent value. Readers never block, and never
+              block writers.
+            </li>
+            <li>
+              <strong
+                >Writing into an empty bucket takes no lock either.</strong
+              >
+              It's a single CAS — compare-and-swap — to install the first node.
+              If the CAS loses a race, the thread simply retries.
+            </li>
+            <li>
+              <strong
+                >Writing into an occupied bucket locks that bucket only</strong
+              >, via <code>synchronized</code> on the node already at the head.
+              Threads working on any of the other buckets are unaffected.
+            </li>
+          </ul>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="Four threads writing to four different buckets, only one of which needs a lock"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    four threads, four buckets, no contention
+                  </text>
+
+                  <!-- bucket 0 -->
+                  <rect
+                    x="16"
+                    y="88"
+                    width="140"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="86"
+                    y="114"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink-faint)"
+                  >
+                    bucket 0 — empty
+                  </text>
+                  <rect
+                    x="36"
+                    y="34"
+                    width="100"
+                    height="30"
+                    rx="15"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="86"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    thread A
+                  </text>
+                  <line
+                    x1="86"
+                    y1="66"
+                    x2="86"
+                    y2="84"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="86"
+                    y="150"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    CAS — no lock
+                  </text>
+
+                  <!-- bucket 1 -->
+                  <rect
+                    x="188"
+                    y="88"
+                    width="140"
+                    height="42"
+                    rx="6"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="258"
+                    y="114"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--hot)"
+                  >
+                    bucket 1 — occupied
+                  </text>
+                  <rect
+                    x="208"
+                    y="34"
+                    width="100"
+                    height="30"
+                    rx="15"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="258"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    thread B
+                  </text>
+                  <line
+                    x1="258"
+                    y1="66"
+                    x2="258"
+                    y2="84"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="258"
+                    y="150"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    locks THIS bin only
+                  </text>
+                  <rect
+                    x="243"
+                    y="160"
+                    width="30"
+                    height="24"
+                    rx="4"
+                    fill="var(--hot)"
+                  />
+                  <rect
+                    x="251"
+                    y="152"
+                    width="14"
+                    height="14"
+                    rx="7"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+
+                  <!-- bucket 2 -->
+                  <rect
+                    x="360"
+                    y="88"
+                    width="140"
+                    height="42"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="430"
+                    y="114"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink-faint)"
+                  >
+                    bucket 2 — empty
+                  </text>
+                  <rect
+                    x="380"
+                    y="34"
+                    width="100"
+                    height="30"
+                    rx="15"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="430"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    thread C
+                  </text>
+                  <line
+                    x1="430"
+                    y1="66"
+                    x2="430"
+                    y2="84"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="430"
+                    y="150"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    CAS — no lock
+                  </text>
+
+                  <!-- bucket 3 read -->
+                  <rect
+                    x="532"
+                    y="88"
+                    width="150"
+                    height="42"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="607"
+                    y="114"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--val)"
+                  >
+                    bucket 3 — reading
+                  </text>
+                  <rect
+                    x="557"
+                    y="34"
+                    width="100"
+                    height="30"
+                    rx="15"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="607"
+                    y="54"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    thread D
+                  </text>
+                  <line
+                    x1="607"
+                    y1="66"
+                    x2="607"
+                    y2="84"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="607"
+                    y="150"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    get() never blocks
+                  </text>
+
+                  <text x="12" y="212" font-size="11" fill="var(--ink-faint)">
+                    Compare Hashtable: all four threads would queue on one lock
+                    covering the entire table.
+                  </text>
+                  <text x="12" y="232" font-size="11" fill="var(--ink-faint)">
+                    Contention here scales with the number of buckets, which
+                    grows with the map.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Lock striping taken to its limit.</b> Java 7 divided the table
+              into 16 fixed <code>Segment</code> locks. Java 8 threw that away —
+              the lock granularity is now a single bin, so it gets finer as the
+              map grows.
+            </figcaption>
+          </figure>
+
+          <h3>Why null is banned</h3>
+          <p>
+            This looks like an arbitrary restriction until you think about a
+            concurrent <code>get</code>. In a <code>HashMap</code>, a
+            <code>null</code> return is ambiguous — either the key is absent, or
+            it's present with a <code>null</code> value — and you resolve it by
+            calling <code>containsKey</code>. In a concurrent map that second
+            call is worthless: another thread may have changed the answer in
+            between, and there's no way to make the pair atomic. Banning null
+            values makes <code>null</code> mean exactly one thing:
+            <em>not there</em>.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">ConcurrentMap</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; counts = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();
+
+<span class="c">// These are atomic — the whole read-modify-write holds the bin lock.</span>
+counts.merge(<span class="s">"hits"</span>, <span class="n">1</span>, <span class="t">Integer</span>::sum);       <span class="c">// safe concurrent counter</span>
+counts.computeIfAbsent(<span class="s">"key"</span>, k -&gt; expensive(k));  <span class="c">// computed at most once</span>
+counts.putIfAbsent(<span class="s">"seed"</span>, <span class="n">0</span>);
+counts.replace(<span class="s">"hits"</span>, <span class="n">10</span>, <span class="n">11</span>);                  <span class="c">// CAS: only if currently 10</span>
+
+<span class="c">// This is NOT atomic — two threads can both read 5 and both write 6.</span>
+counts.put(<span class="s">"hits"</span>, counts.get(<span class="s">"hits"</span>) + <span class="n">1</span>);      <span class="c">// ✗ lost update</span>
+
+<span class="c">// Parallel bulk operations. The threshold is the number of elements</span>
+<span class="c">// below which it stays single-threaded.</span>
+counts.forEach(<span class="n">16</span>, (k, v) -&gt; <span class="t">System</span>.out.println(k + <span class="s">"="</span> + v));
+<span class="t">Integer</span> total = counts.reduceValues(<span class="n">16</span>, <span class="t">Integer</span>::sum);
+<span class="t">String</span> found = counts.search(<span class="n">16</span>, (k, v) -&gt; v &gt; <span class="n">100</span> ? k : <span class="k">null</span>);</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Two sharp edges</span>
+            <p>
+              <strong><code>size()</code> is an estimate.</strong> The count is
+              striped across cells to avoid a single contended counter, so
+              <code>size()</code> sums them without locking. In a quiet moment
+              it's exact; under concurrent writes it's approximate. Never use it
+              in a correctness check.
+            </p>
+            <p>
+              <strong
+                >Don't do slow or reentrant work inside
+                <code>computeIfAbsent</code>.</strong
+              >
+              The bin lock is held for the duration of your lambda. Blocking I/O
+              in there stalls every other writer to that bin, and touching the
+              same map from inside the lambda can deadlock outright.
+            </p>
+          </div>
+
+          <p>
+            Iterators are <strong>weakly consistent</strong>: they never throw
+            <code>ConcurrentModificationException</code>, they reflect the map
+            at some point at or after creation, and they may or may not show
+            changes made during the walk. That's the deliberate trade for never
+            blocking.
+          </p>
+        </section>
+
+        <!-- ================= SKIPLIST ================= -->
+        <section id="skiplist">
+          <h2>ConcurrentSkipListMap</h2>
+          <p class="lede">
+            What you use when you need <em>both</em> sorted keys and thread
+            safety. It's a TreeMap's capability with a completely different
+            machine underneath.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Skip list</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>Sorted by key</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="yes">Yes — lock-free</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(log n) expected</dd>
+            </div>
+          </dl>
+
+          <p>
+            Balanced trees are miserable to make concurrent — a rebalance
+            rewrites pointers all over the structure, so you end up locking
+            large regions. A <strong>skip list</strong> sidesteps the problem:
+            it's a sorted linked list with randomly-built express lanes above
+            it. Every insert flips coins to decide how many lanes its node
+            joins. No rebalancing ever happens, so every update is a local
+            pointer change that CAS can handle without locks.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="A three-level skip list with express lanes, showing the search path for a key"
+              >
+                <defs>
+                  <marker
+                    id="ar5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--rule-strong)" />
+                  </marker>
+                  <marker
+                    id="ar5k"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="12">
+                  <text
+                    x="12"
+                    y="20"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    searching for 47 — the express lanes skip most of the list
+                  </text>
+
+                  <!-- level 3 -->
+                  <text x="12" y="52" font-size="10" fill="var(--ink-faint)">
+                    L2
+                  </text>
+                  <rect
+                    x="44"
+                    y="34"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="67"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    HEAD
+                  </text>
+                  <line
+                    x1="92"
+                    y1="48"
+                    x2="410"
+                    y2="48"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ar5k)"
+                  />
+                  <rect
+                    x="416"
+                    y="34"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="439"
+                    y="53"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    40
+                  </text>
+                  <line
+                    x1="464"
+                    y1="48"
+                    x2="650"
+                    y2="48"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    marker-end="url(#ar5)"
+                  />
+
+                  <!-- level 2 -->
+                  <text x="12" y="106" font-size="10" fill="var(--ink-faint)">
+                    L1
+                  </text>
+                  <rect
+                    x="44"
+                    y="88"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="67"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink-faint)"
+                  >
+                    HEAD
+                  </text>
+                  <line
+                    x1="92"
+                    y1="102"
+                    x2="218"
+                    y2="102"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="224"
+                    y="88"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="247"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    20
+                  </text>
+                  <line
+                    x1="272"
+                    y1="102"
+                    x2="410"
+                    y2="102"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="416"
+                    y="88"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="439"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    40
+                  </text>
+                  <line
+                    x1="464"
+                    y1="102"
+                    x2="506"
+                    y2="102"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ar5k)"
+                  />
+                  <rect
+                    x="512"
+                    y="88"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="535"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    60
+                  </text>
+
+                  <!-- level 1 : full list -->
+                  <text x="12" y="160" font-size="10" fill="var(--ink-faint)">
+                    L0
+                  </text>
+                  <rect
+                    x="44"
+                    y="142"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="67"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink-faint)"
+                  >
+                    HEAD
+                  </text>
+                  <line
+                    x1="92"
+                    y1="156"
+                    x2="122"
+                    y2="156"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="128"
+                    y="142"
+                    width="42"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="149"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    10
+                  </text>
+                  <line
+                    x1="172"
+                    y1="156"
+                    x2="218"
+                    y2="156"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="224"
+                    y="142"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="247"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    20
+                  </text>
+                  <line
+                    x1="272"
+                    y1="156"
+                    x2="314"
+                    y2="156"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="320"
+                    y="142"
+                    width="42"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="341"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    30
+                  </text>
+                  <line
+                    x1="364"
+                    y1="156"
+                    x2="410"
+                    y2="156"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="416"
+                    y="142"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="439"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    40
+                  </text>
+                  <line
+                    x1="464"
+                    y1="156"
+                    x2="506"
+                    y2="156"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ar5k)"
+                  />
+                  <rect
+                    x="512"
+                    y="142"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="535"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    47
+                  </text>
+                  <line
+                    x1="560"
+                    y1="156"
+                    x2="596"
+                    y2="156"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    marker-end="url(#ar5)"
+                  />
+                  <rect
+                    x="602"
+                    y="142"
+                    width="46"
+                    height="28"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="625"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    fill="var(--ink)"
+                  >
+                    60
+                  </text>
+
+                  <text x="12" y="198" font-size="11" fill="var(--ink-faint)">
+                    Drop down a lane when the next node overshoots. Random lane
+                    heights give O(log n) expected.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Randomness instead of rebalancing.</b> Skip lists trade a
+              guaranteed bound for a probabilistic one, and get lock-free
+              concurrent updates in exchange. <code>size()</code> here is O(n) —
+              it walks the bottom lane — so avoid it in loops.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">ConcurrentNavigableMap</span>&lt;<span class="t">Long</span>, <span class="t">String</span>&gt; events = <span class="k">new</span> <span class="t">ConcurrentSkipListMap</span>&lt;&gt;();
+events.put(<span class="t">System</span>.currentTimeMillis(), <span class="s">"started"</span>);
+
+<span class="c">// Full NavigableMap vocabulary, safe across threads.</span>
+events.headMap(cutoff).clear();          <span class="c">// expire everything older</span>
+events.firstEntry();                     <span class="c">// oldest surviving event</span>
+events.pollFirstEntry();                 <span class="c">// atomic take-from-front</span></pre>
+          </div>
+        </section>
+
+        <!-- ================= ENUMMAP ================= -->
+        <section id="enummap">
+          <h2>EnumMap</h2>
+          <p class="lede">
+            When your keys are an enum, hashing is wasted work. The compiler
+            already numbered them for you.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Plain array</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>Enum declaration order</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) — a real one</dd>
+            </div>
+          </dl>
+
+          <p>
+            Every enum constant has an <code>ordinal()</code> — its position in
+            the declaration, starting at zero. <code>EnumMap</code> allocates
+            one array slot per constant and indexes it directly. No hashing, no
+            collisions, no chains, no load factor, no resizing. Ever. It's the
+            fastest Map in the JDK and also the smallest.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 200"
+                role="img"
+                aria-label="Enum constants mapping directly onto array slots by ordinal"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    enum Day { MON, TUE, WED, THU, FRI }
+                  </text>
+
+                  <g>
+                    <rect
+                      x="14"
+                      y="34"
+                      width="122"
+                      height="30"
+                      rx="5"
+                      fill="var(--key-bg)"
+                      stroke="var(--key)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="75"
+                      y="54"
+                      text-anchor="middle"
+                      font-weight="700"
+                      fill="var(--key)"
+                    >
+                      MON
+                    </text>
+                    <text x="152" y="54" font-size="11" fill="var(--ink-faint)">
+                      ordinal 0
+                    </text>
+
+                    <rect
+                      x="14"
+                      y="70"
+                      width="122"
+                      height="30"
+                      rx="5"
+                      fill="var(--key-bg)"
+                      stroke="var(--key)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="75"
+                      y="90"
+                      text-anchor="middle"
+                      font-weight="700"
+                      fill="var(--key)"
+                    >
+                      TUE
+                    </text>
+                    <text x="152" y="90" font-size="11" fill="var(--ink-faint)">
+                      ordinal 1
+                    </text>
+
+                    <rect
+                      x="14"
+                      y="106"
+                      width="122"
+                      height="30"
+                      rx="5"
+                      fill="var(--key-bg)"
+                      stroke="var(--key)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="75"
+                      y="126"
+                      text-anchor="middle"
+                      font-weight="700"
+                      fill="var(--key)"
+                    >
+                      WED
+                    </text>
+                    <text
+                      x="152"
+                      y="126"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                    >
+                      ordinal 2
+                    </text>
+
+                    <rect
+                      x="14"
+                      y="142"
+                      width="122"
+                      height="30"
+                      rx="5"
+                      fill="var(--key-bg)"
+                      stroke="var(--key)"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x="75"
+                      y="162"
+                      text-anchor="middle"
+                      font-weight="700"
+                      fill="var(--key)"
+                    >
+                      THU
+                    </text>
+                    <text
+                      x="152"
+                      y="162"
+                      font-size="11"
+                      fill="var(--ink-faint)"
+                    >
+                      ordinal 3
+                    </text>
+                  </g>
+
+                  <text
+                    x="250"
+                    y="100"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    direct index →
+                  </text>
+                  <text
+                    x="250"
+                    y="120"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    no hash, no mask
+                  </text>
+
+                  <text x="400" y="20" font-size="11" fill="var(--ink-faint)">
+                    Object[] vals
+                  </text>
+                  <rect
+                    x="400"
+                    y="34"
+                    width="150"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="475" y="54" text-anchor="middle" fill="var(--val)">
+                    "gym"
+                  </text>
+                  <text x="562" y="54" font-size="11" fill="var(--ink-faint)">
+                    vals[0]
+                  </text>
+
+                  <rect
+                    x="400"
+                    y="70"
+                    width="150"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="475" y="90" text-anchor="middle" fill="var(--val)">
+                    "rest"
+                  </text>
+                  <text x="562" y="90" font-size="11" fill="var(--ink-faint)">
+                    vals[1]
+                  </text>
+
+                  <rect
+                    x="400"
+                    y="106"
+                    width="150"
+                    height="30"
+                    rx="5"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="475"
+                    y="126"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink-faint)"
+                  >
+                    absent
+                  </text>
+                  <text x="562" y="126" font-size="11" fill="var(--ink-faint)">
+                    vals[2]
+                  </text>
+
+                  <rect
+                    x="400"
+                    y="142"
+                    width="150"
+                    height="30"
+                    rx="5"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text x="475" y="162" text-anchor="middle" fill="var(--val)">
+                    "swim"
+                  </text>
+                  <text x="562" y="162" font-size="11" fill="var(--ink-faint)">
+                    vals[3]
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Array indexing, dressed as a Map.</b> Because slots are ordered
+              by ordinal, iteration comes out in declaration order automatically
+              — often exactly the order you wanted.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="k">enum</span> <span class="t">Day</span> { MON, TUE, WED, THU, FRI }
+
+<span class="c">// Needs the Class object — that's how it knows how big the array must be.</span>
+<span class="t">EnumMap</span>&lt;<span class="t">Day</span>, <span class="t">String</span>&gt; plan = <span class="k">new</span> <span class="t">EnumMap</span>&lt;&gt;(<span class="t">Day</span>.<span class="k">class</span>);
+plan.put(<span class="t">Day</span>.WED, <span class="s">"swim"</span>);
+plan.put(<span class="t">Day</span>.MON, <span class="s">"gym"</span>);
+
+<span class="c">// Always declaration order, regardless of insertion order.</span>
+<span class="t">System</span>.out.println(plan);     <span class="c">// {MON=gym, WED=swim}</span></pre>
+          </div>
+
+          <p>
+            The rule of thumb is simple: if the key type is an enum, use
+            <code>EnumMap</code>. There is no case where
+            <code>HashMap</code> beats it.
+          </p>
+        </section>
+
+        <!-- ================= IDENTITYHASHMAP ================= -->
+        <section id="identity">
+          <h2>IdentityHashMap</h2>
+          <p class="lede">
+            Deliberately breaks the Map contract: it compares keys with
+            <code>==</code> instead of <code>equals()</code>. Rarely what you
+            want, occasionally exactly what you need.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Array, linear probing</dd>
+            </div>
+            <div>
+              <dt>Key comparison</dt>
+              <dd>Reference <code>==</code></dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) average</dd>
+            </div>
+          </dl>
+
+          <p>
+            Two differences from everything above. It hashes with
+            <code>System.identityHashCode()</code> — the object's own identity,
+            not its contents — and it resolves collisions by
+            <strong>linear probing</strong> rather than chaining: on a clash it
+            just walks forward to the next free pair of slots. Keys and values
+            interleave in a single flat array, keys at even indices, values at
+            odd.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 170"
+                role="img"
+                aria-label="A flat array with keys at even indices and values at odd, showing a linear probe to the next free slot"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="20" font-size="11" fill="var(--ink-faint)">
+                    one flat Object[] — k, v, k, v, …
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="50"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    key A
+                  </text>
+                  <rect
+                    x="90"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="128"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    val A
+                  </text>
+
+                  <rect
+                    x="170"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="208"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    key B
+                  </text>
+                  <rect
+                    x="248"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="286"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    val B
+                  </text>
+
+                  <rect
+                    x="328"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="366"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    free
+                  </text>
+                  <rect
+                    x="406"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="444"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    free
+                  </text>
+
+                  <rect
+                    x="486"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="524"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    key C
+                  </text>
+                  <rect
+                    x="564"
+                    y="34"
+                    width="76"
+                    height="34"
+                    rx="4"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="602"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    val C
+                  </text>
+
+                  <text x="20" y="84" font-size="10" fill="var(--ink-faint)">
+                    [0]
+                  </text>
+                  <text x="98" y="84" font-size="10" fill="var(--ink-faint)">
+                    [1]
+                  </text>
+                  <text x="178" y="84" font-size="10" fill="var(--ink-faint)">
+                    [2]
+                  </text>
+                  <text x="256" y="84" font-size="10" fill="var(--ink-faint)">
+                    [3]
+                  </text>
+                  <text x="336" y="84" font-size="10" fill="var(--ink-faint)">
+                    [4]
+                  </text>
+                  <text x="414" y="84" font-size="10" fill="var(--ink-faint)">
+                    [5]
+                  </text>
+                  <text x="494" y="84" font-size="10" fill="var(--ink-faint)">
+                    [6]
+                  </text>
+                  <text x="572" y="84" font-size="10" fill="var(--ink-faint)">
+                    [7]
+                  </text>
+
+                  <path
+                    d="M208 100 C208 124, 366 124, 366 78"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="220"
+                    y="140"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    collision at [2] → probe forward to the next free pair at
+                    [4]
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Open addressing, not chaining.</b> Everything lives in one
+              contiguous array, which is cache-friendly but means a full table
+              degrades sharply — it resizes well before that point.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">String</span> a = <span class="k">new</span> <span class="t">String</span>(<span class="s">"hello"</span>);
+<span class="t">String</span> b = <span class="k">new</span> <span class="t">String</span>(<span class="s">"hello"</span>);   <span class="c">// a.equals(b) but a != b</span>
+
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; normal = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+normal.put(a, <span class="n">1</span>); normal.put(b, <span class="n">2</span>);
+<span class="t">System</span>.out.println(normal.size());     <span class="c">// 1 — equal keys collapse</span>
+
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; ident = <span class="k">new</span> <span class="t">IdentityHashMap</span>&lt;&gt;();
+ident.put(a, <span class="n">1</span>); ident.put(b, <span class="n">2</span>);
+<span class="t">System</span>.out.println(ident.size());      <span class="c">// 2 — distinct objects, distinct keys</span></pre>
+          </div>
+
+          <p>
+            The legitimate uses are narrow and real: graph or object-graph
+            traversal where you must track "have I visited
+            <em>this exact object</em>", serialization frameworks preserving
+            reference topology, and attaching metadata to objects whose
+            <code>equals()</code> is expensive or lies. Outside those, reaching
+            for it is almost always a mistake.
+          </p>
+        </section>
+
+        <!-- ================= WEAKHASHMAP ================= -->
+        <section id="weak">
+          <h2>WeakHashMap</h2>
+          <p class="lede">
+            A Map whose entries delete themselves. It holds its keys weakly, so
+            an entry lives exactly as long as someone else is still using the
+            key.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Array + chains</dd>
+            </div>
+            <div>
+              <dt>Key references</dt>
+              <dd>Weak — GC-collectable</dd>
+            </div>
+            <div>
+              <dt>null key</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>null values</dt>
+              <dd class="yes">Allowed</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="no">No</dd>
+            </div>
+            <div>
+              <dt>get() cost</dt>
+              <dd>O(1) average</dd>
+            </div>
+          </dl>
+
+          <p>
+            Normally, putting an object into a Map keeps it alive — the Map's
+            reference is enough to stop the garbage collector.
+            <code>WeakHashMap</code> wraps each key in a
+            <code>WeakReference</code>, which the GC is free to ignore. Once
+            nothing else in your program refers to a key, the collector reclaims
+            it and the entry silently disappears from the map.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 210"
+                role="img"
+                aria-label="An entry surviving while a strong reference exists, then vanishing after that reference is dropped and GC runs"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11.5">
+                  <text
+                    x="12"
+                    y="20"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    WHILE someone else holds the key
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="34"
+                    width="120"
+                    height="36"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="74"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    your code
+                  </text>
+                  <line
+                    x1="136"
+                    y1="52"
+                    x2="204"
+                    y2="52"
+                    stroke="var(--good)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="170"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    strong
+                  </text>
+
+                  <rect
+                    x="208"
+                    y="34"
+                    width="96"
+                    height="36"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="256"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    key
+                  </text>
+
+                  <line
+                    x1="306"
+                    y1="52"
+                    x2="384"
+                    y2="52"
+                    stroke="var(--ink-faint)"
+                    stroke-width="2"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="345"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-faint)"
+                  >
+                    weak
+                  </text>
+
+                  <rect
+                    x="388"
+                    y="34"
+                    width="150"
+                    height="36"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="463"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    entry alive
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="94"
+                    x2="688"
+                    y2="94"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text
+                    x="12"
+                    y="124"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    AFTER that reference is dropped and the GC runs
+                  </text>
+
+                  <rect
+                    x="14"
+                    y="138"
+                    width="120"
+                    height="36"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    x="74"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--ink)"
+                  >
+                    your code
+                  </text>
+                  <line
+                    x1="136"
+                    y1="156"
+                    x2="204"
+                    y2="156"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                    stroke-dasharray="3 5"
+                  />
+                  <text
+                    x="170"
+                    y="148"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    gone
+                  </text>
+
+                  <rect
+                    x="208"
+                    y="138"
+                    width="96"
+                    height="36"
+                    rx="6"
+                    fill="none"
+                    stroke="var(--hot)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="256"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    collected
+                  </text>
+
+                  <line
+                    x1="306"
+                    y1="156"
+                    x2="384"
+                    y2="156"
+                    stroke="var(--rule)"
+                    stroke-width="1.5"
+                    stroke-dasharray="3 5"
+                  />
+
+                  <rect
+                    x="388"
+                    y="138"
+                    width="150"
+                    height="36"
+                    rx="6"
+                    fill="none"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.5"
+                    stroke-dasharray="5 4"
+                  />
+                  <text
+                    x="463"
+                    y="161"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    entry removed
+                  </text>
+
+                  <text
+                    x="556"
+                    y="161"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    size() drops
+                  </text>
+                  <text
+                    x="556"
+                    y="176"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    on its own
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Cleanup is not instant.</b> Cleared keys land on a
+              <code>ReferenceQueue</code>, and the map drains it during ordinary
+              operations. Entries vanish at some unpredictable point after
+              collection — never treat the timing as deterministic.
+            </figcaption>
+          </figure>
+
+          <div class="note danger">
+            <span class="tag">The classic leak</span>
+            <p>
+              <strong>Values are held strongly.</strong> If a value refers back
+              to its own key — directly, or through a field — the value keeps
+              the key alive, the key keeps the entry alive, and nothing is ever
+              collected. You have built a memory leak out of the tool you chose
+              to prevent one. Wrap such values in a <code>WeakReference</code>,
+              or use a different design.
+            </p>
+          </div>
+
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">Object</span>, <span class="t">String</span>&gt; meta = <span class="k">new</span> <span class="t">WeakHashMap</span>&lt;&gt;();
+<span class="t">Object</span> key = <span class="k">new</span> <span class="t">Object</span>();
+meta.put(key, <span class="s">"some metadata"</span>);
+<span class="t">System</span>.out.println(meta.size());   <span class="c">// 1</span>
+
+key = <span class="k">null</span>;                          <span class="c">// last strong reference dropped</span>
+<span class="t">System</span>.gc();                        <span class="c">// a hint, not a command</span>
+<span class="c">// eventually → meta.size() == 0, entry expunged on a later operation</span></pre>
+          </div>
+
+          <p>
+            It's the right tool for associating extra data with objects you
+            don't own the lifecycle of — a cache keyed by
+            <code>Class</code> objects, listener registries that shouldn't pin
+            their subjects, canonicalizing maps.
+          </p>
+        </section>
+
+        <!-- ================= IMMUTABLE ================= -->
+        <section id="immutable">
+          <h2>Map.of and the immutable maps</h2>
+          <p class="lede">
+            Small, fixed, unchangeable — and deliberately unpredictable in
+            iteration order, to stop you depending on it.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Backing structure</dt>
+              <dd>Probed flat array</dd>
+            </div>
+            <div>
+              <dt>Iteration order</dt>
+              <dd>Randomized per JVM run</dd>
+            </div>
+            <div>
+              <dt>null key or value</dt>
+              <dd class="no">Throws NPE</dd>
+            </div>
+            <div>
+              <dt>Duplicate keys</dt>
+              <dd class="no">Throws IAE</dd>
+            </div>
+            <div>
+              <dt>Thread-safe</dt>
+              <dd class="yes">Yes — immutable</dd>
+            </div>
+            <div>
+              <dt>Mutation</dt>
+              <dd class="no">UnsupportedOperation</dd>
+            </div>
+          </dl>
+
+          <p>
+            Since Java 9, <code>Map.of()</code> builds a compact immutable map
+            with no buckets and no chains — just a flat probe table sized about
+            twice the entry count. Up to ten pairs inline; beyond that use
+            <code>Map.ofEntries</code>.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; fixed = <span class="t">Map</span>.of(<span class="s">"a"</span>, <span class="n">1</span>, <span class="s">"b"</span>, <span class="n">2</span>, <span class="s">"c"</span>, <span class="n">3</span>);
+fixed.put(<span class="s">"d"</span>, <span class="n">4</span>);       <span class="c">// UnsupportedOperationException</span>
+
+<span class="c">// More than 10 pairs:</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; bigger = <span class="t">Map</span>.ofEntries(
+    <span class="t">Map</span>.entry(<span class="s">"a"</span>, <span class="n">1</span>),
+    <span class="t">Map</span>.entry(<span class="s">"b"</span>, <span class="n">2</span>)
+);
+
+<span class="c">// Defensive copy — also immutable.</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; snapshot = <span class="t">Map</span>.copyOf(mutableMap);
+
+<span class="c">// The old way: a VIEW, not a copy. Changes to the</span>
+<span class="c">// original still show through this wrapper.</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; view = <span class="t">Collections</span>.unmodifiableMap(mutableMap);</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">The randomized order is a feature</span>
+            <p>
+              Iteration order of <code>Map.of()</code> is salted differently on
+              each JVM start, so the same code produces a different order
+              between runs. That's intentional: it makes accidental
+              order-dependence fail loudly during testing instead of silently in
+              production. Never write code that relies on it.
+            </p>
+          </div>
+        </section>
+
+        <!-- ================= COMPARE ================= -->
+        <section id="compare">
+          <h2>Compare them all</h2>
+
+          <h4>Structure and cost</h4>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Implementation</th>
+                  <th>Under the hood</th>
+                  <th class="mono">get</th>
+                  <th class="mono">put</th>
+                  <th>Iteration order</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">HashMap</td>
+                  <td>Array + chains + red-black trees</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Unspecified</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedHashMap</td>
+                  <td>HashMap + doubly-linked list</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Insertion or access</td>
+                </tr>
+                <tr>
+                  <td class="name">Hashtable</td>
+                  <td>Array + chains, one global lock</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Unspecified</td>
+                </tr>
+                <tr>
+                  <td class="name">TreeMap</td>
+                  <td>Red-black tree</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td>Sorted by key</td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentHashMap</td>
+                  <td>Array + per-bin locks + CAS</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Unspecified</td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentSkipListMap</td>
+                  <td>Lock-free skip list</td>
+                  <td class="mono">O(log n)</td>
+                  <td class="mono">O(log n)</td>
+                  <td>Sorted by key</td>
+                </tr>
+                <tr>
+                  <td class="name">EnumMap</td>
+                  <td>Plain array indexed by ordinal</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                  <td>Enum declaration</td>
+                </tr>
+                <tr>
+                  <td class="name">IdentityHashMap</td>
+                  <td>Flat array, linear probing</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Unspecified</td>
+                </tr>
+                <tr>
+                  <td class="name">WeakHashMap</td>
+                  <td>Array + chains, weak keys</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">O(1)*</td>
+                  <td>Unspecified</td>
+                </tr>
+                <tr>
+                  <td class="name">Map.of(…)</td>
+                  <td>Immutable probe table</td>
+                  <td class="mono">O(1)*</td>
+                  <td class="mono">—</td>
+                  <td>Randomized</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size: 15px; color: var(--ink-faint)">
+            * average case with a decent <code>hashCode()</code>.
+            <code>HashMap</code> and <code>ConcurrentHashMap</code> degrade to
+            O(log&nbsp;n), not O(n), once a bucket treeifies.
+          </p>
+
+          <h4>Nulls and thread safety</h4>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Implementation</th>
+                  <th>null key</th>
+                  <th>null value</th>
+                  <th>Thread-safe</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">HashMap</td>
+                  <td class="y">one</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>null key always lands in bucket 0</td>
+                </tr>
+                <tr>
+                  <td class="name">LinkedHashMap</td>
+                  <td class="y">one</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>access-order mode makes <code>get</code> a mutation</td>
+                </tr>
+                <tr>
+                  <td class="name">Hashtable</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                  <td class="mid">coarse</td>
+                  <td>every method synchronized on the whole map</td>
+                </tr>
+                <tr>
+                  <td class="name">TreeMap</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>unless a comparator tolerates null</td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentHashMap</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td>null must mean "absent", unambiguously</td>
+                </tr>
+                <tr>
+                  <td class="name">ConcurrentSkipListMap</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td><code>size()</code> is O(n) — it walks the list</td>
+                </tr>
+                <tr>
+                  <td class="name">EnumMap</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>uses an internal sentinel for null values</td>
+                </tr>
+                <tr>
+                  <td class="name">IdentityHashMap</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>
+                    compares with <code>==</code>, breaking the Map contract
+                  </td>
+                </tr>
+                <tr>
+                  <td class="name">WeakHashMap</td>
+                  <td class="y">yes</td>
+                  <td class="y">yes</td>
+                  <td class="n">no</td>
+                  <td>entries disappear without you removing them</td>
+                </tr>
+                <tr>
+                  <td class="name">Map.of(…)</td>
+                  <td class="n">no</td>
+                  <td class="n">no</td>
+                  <td class="y">yes</td>
+                  <td>immutable, so trivially safe</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= PICK ================= -->
+        <section id="pick">
+          <h2>Which do I pick?</h2>
+          <p class="lede">
+            Ninety percent of the time the answer is <code>HashMap</code>. Here
+            is the rest.
+          </p>
+
+          <ul class="pick">
+            <li>
+              <span class="want">I just need a map</span
+              ><span class="use">HashMap</span>
+            </li>
+            <li>
+              <span class="want">Threads will touch it</span
+              ><span class="use">ConcurrentHashMap</span>
+            </li>
+            <li>
+              <span class="want"
+                >I need keys sorted, or "nearest key" queries</span
+              ><span class="use">TreeMap</span>
+            </li>
+            <li>
+              <span class="want">Sorted <em>and</em> concurrent</span
+              ><span class="use">ConcurrentSkipListMap</span>
+            </li>
+            <li>
+              <span class="want">Iteration must follow insertion order</span
+              ><span class="use">LinkedHashMap</span>
+            </li>
+            <li>
+              <span class="want">I want a bounded LRU cache</span
+              ><span class="use">LinkedHashMap</span>
+            </li>
+            <li>
+              <span class="want">My keys are an enum</span
+              ><span class="use">EnumMap</span>
+            </li>
+            <li>
+              <span class="want"
+                >Entries should vanish when keys are unreachable</span
+              ><span class="use">WeakHashMap</span>
+            </li>
+            <li>
+              <span class="want">I need reference identity, not equality</span
+              ><span class="use">IdentityHashMap</span>
+            </li>
+            <li>
+              <span class="want">A small constant lookup table</span
+              ><span class="use">Map.of(…)</span>
+            </li>
+            <li>
+              <span class="want">I'm maintaining 1998 code</span
+              ><span class="use">Hashtable</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ================= GOTCHAS ================= -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Mutating a key after you've stored it</h3>
+          <p>
+            The Map filed the entry under the key's hash
+            <em>at insertion time</em>. Change a field that
+            <code>hashCode()</code> reads, and the key now computes a different
+            bucket. The entry is still in the table, holding memory, but
+            unreachable through the front door.
+          </p>
+
+          <div class="code">
+            <pre><span class="t">List</span>&lt;<span class="t">String</span>&gt; key = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;(<span class="t">List</span>.of(<span class="s">"a"</span>));
+<span class="t">Map</span>&lt;<span class="t">List</span>&lt;<span class="t">String</span>&gt;, <span class="t">String</span>&gt; m = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+m.put(key, <span class="s">"stored"</span>);
+
+key.add(<span class="s">"b"</span>);                  <span class="c">// hashCode just changed</span>
+
+m.get(key);                    <span class="c">// null — wrong bucket now</span>
+m.containsKey(key);            <span class="c">// false</span>
+m.size();                      <span class="c">// 1 — it's still in there, just lost</span></pre>
+          </div>
+
+          <p>
+            Use immutable keys. <code>String</code>, boxed primitives, enums,
+            and records are all safe by construction.
+          </p>
+
+          <h3>Sharing a HashMap across threads</h3>
+          <p>
+            An unsynchronized <code>HashMap</code> under concurrent writes
+            doesn't just lose updates — it can corrupt its own structure. On
+            Java 7 a concurrent resize could weave a chain into a cycle, and a
+            later <code>get()</code> would spin forever at 100% CPU. Java 8's
+            resize is no longer prone to that particular loop, but entries still
+            vanish and internal state still tears. It's undefined behaviour;
+            don't reason about which symptom you'll get.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// ✗ Undefined behaviour under concurrent writes</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; bad = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+
+<span class="c">// ✓ Correct, and fast</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; good = <span class="k">new</span> <span class="t">ConcurrentHashMap</span>&lt;&gt;();
+
+<span class="c">// ~ Correct but coarse: one lock for the whole map,</span>
+<span class="c">// and compound operations STILL need external sync.</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; meh = <span class="t">Collections</span>.synchronizedMap(<span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;());
+<span class="k">synchronized</span> (meh) {                  <span class="c">// required — iteration is not covered</span>
+    <span class="k">for</span> (<span class="t">var</span> e : meh.entrySet()) { <span class="c">/* … */</span> }
+}</pre>
+          </div>
+
+          <h3>Assuming iteration order</h3>
+          <p>
+            <code>HashMap</code> order is not insertion order, not sorted order,
+            and not stable — it changes when the table resizes, and it differs
+            across Java versions. Code that passes today because the order
+            happened to be convenient will break on a resize you didn't predict.
+            If order matters, say so in the type: <code>LinkedHashMap</code> or
+            <code>TreeMap</code>.
+          </p>
+
+          <h3>Modifying a map while iterating it</h3>
+          <div class="code">
+            <pre><span class="c">// ✗ ConcurrentModificationException</span>
+<span class="k">for</span> (<span class="t">String</span> k : map.keySet()) {
+    <span class="k">if</span> (k.startsWith(<span class="s">"tmp"</span>)) map.remove(k);
+}
+
+<span class="c">// ✓ Removal through the iterator is legal</span>
+<span class="t">Iterator</span>&lt;<span class="t">String</span>&gt; it = map.keySet().iterator();
+<span class="k">while</span> (it.hasNext()) {
+    <span class="k">if</span> (it.next().startsWith(<span class="s">"tmp"</span>)) it.remove();
+}
+
+<span class="c">// ✓ Or just say what you mean</span>
+map.keySet().removeIf(k -&gt; k.startsWith(<span class="s">"tmp"</span>));</pre>
+          </div>
+
+          <h3>Forgetting that computeIfAbsent rejects null returns</h3>
+          <p>
+            If your mapping function returns <code>null</code>, no entry is
+            recorded — the call returns <code>null</code> and the map is
+            untouched. That's usually what you want, but it means
+            <code>computeIfAbsent</code> can be called repeatedly for the same
+            key without ever caching anything, which looks like a mysterious
+            performance problem rather than a bug.
+          </p>
+
+          <div class="note">
+            <span class="tag">One habit worth keeping</span>
+            <p>
+              Declare variables as <code>Map</code>, not the implementation —
+              <code>Map&lt;String, Integer&gt; m = new HashMap&lt;&gt;()</code>.
+              Swapping <code>HashMap</code> for
+              <code>ConcurrentHashMap</code> six months from now then costs one
+              line instead of a refactor. The exception is when the
+              implementation's extra methods are the point: a
+              <code>TreeMap</code> declared as <code>Map</code> loses
+              <code>floorKey</code> and every other navigation method, so
+              declare that one as <code>NavigableMap</code>.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
