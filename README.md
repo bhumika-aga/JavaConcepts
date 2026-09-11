@@ -1,25 +1,26 @@
 # Java Lectures
 
-Nine self-contained references on how Java actually works underneath the API —
+Ten self-contained references on how Java actually works underneath the API —
 the mechanisms, not the syntax. Each one follows the same shape: a lead-in,
 mechanism diagrams, real code, comparison tables, and a closing
 "ways to get hurt" section.
 
 Open **[`index.html`](index.html)** to browse them, or open any lecture directly.
 
-| #   | Lecture                                                      | Covers                                                                                                                                      | Sections | Diagrams |
-| --- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- |
-| 01  | [Inside Java Maps](01-inside-java-maps.html)                 | Hashing, collision chains, treeify at 8, the power-of-two resize trick — then every implementation from `LinkedHashMap` to `WeakHashMap`    | 15       | 13       |
-| 02  | [Inside Java Generics](02-inside-java-generics.html)         | Type parameters, bounds, invariance, wildcards and PECS, wildcard capture, and exactly what type erasure leaves behind                      | 14       | 6        |
-| 03  | [Inside Java Threads](03-inside-java-threads.html)           | The memory model and happens-before, locks and deadlock, `java.util.concurrent`, executors, `CompletableFuture`, virtual threads            | 12       | 8        |
-| 04  | [Inside Stacks and Queues](04-inside-stacks-and-queues.html) | The two memory regions and three container shapes that share their names, plus the binary heap inside `PriorityQueue`                       | 12       | 5        |
-| 05  | [Java Concurrency Primer](05-java-concurrency-primer.html)   | The short form of 03 — one fact, three problems, five tools, seven rules                                                                    | 6        | 1        |
-| 06  | [Inside Kafka](06-inside-kafka.html)                         | Why it's a log and not a queue, partitions and ordering, acks and durability, consumer groups, offsets, rebalancing, exactly-once           | 15       | 5        |
-| 07  | [Inside Spring](07-inside-spring.html)                       | Inversion of control, the bean lifecycle, why proxy-based annotations silently do nothing, `@Transactional`'s defaults, MVC and data access | 14       | 5        |
-| 08  | [Inside Spring Boot](08-inside-spring-boot.html)             | Auto-configuration internals, starters, the property precedence ladder, the startup sequence, the fat jar, Actuator, AOT and native         | 14       | 4        |
-| 09  | [Inside Trees](09-inside-trees.html)                         | Binary search trees, the four traversals, balance and rotations, red-black rules, `TreeMap` and `TreeSet`, tries and B-trees                | 14       | 6        |
+| #   | Lecture                                                      | Covers                                                                                                                                               | Sections | Diagrams |
+| --- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- |
+| 01  | [Inside Java Maps](01-inside-java-maps.html)                 | Hashing, collision chains, treeify at 8, the power-of-two resize trick — then every implementation from `LinkedHashMap` to `WeakHashMap`             | 15       | 13       |
+| 02  | [Inside Java Generics](02-inside-java-generics.html)         | Type parameters, bounds, invariance, wildcards and PECS, wildcard capture, and exactly what type erasure leaves behind                               | 14       | 6        |
+| 03  | [Inside Java Threads](03-inside-java-threads.html)           | The memory model and happens-before, locks and deadlock, `java.util.concurrent`, executors, `CompletableFuture`, virtual threads                     | 12       | 8        |
+| 04  | [Inside Stacks and Queues](04-inside-stacks-and-queues.html) | The two memory regions and three container shapes that share their names, plus the binary heap inside `PriorityQueue`                                | 12       | 5        |
+| 05  | [Java Concurrency Primer](05-java-concurrency-primer.html)   | The short form of 03 — one fact, three problems, five tools, seven rules                                                                             | 6        | 1        |
+| 06  | [Inside Kafka](06-inside-kafka.html)                         | Why it's a log and not a queue, partitions and ordering, acks and durability, consumer groups, offsets, rebalancing, exactly-once                    | 15       | 5        |
+| 07  | [Inside Spring](07-inside-spring.html)                       | Inversion of control, the bean lifecycle, why proxy-based annotations silently do nothing, `@Transactional`'s defaults, MVC and data access          | 14       | 5        |
+| 08  | [Inside Spring Boot](08-inside-spring-boot.html)             | Auto-configuration internals, starters, the property precedence ladder, the startup sequence, the fat jar, Actuator, AOT and native                  | 14       | 4        |
+| 09  | [Inside Trees](09-inside-trees.html)                         | Binary search trees, the four traversals, balance and rotations, red-black rules, `TreeMap` and `TreeSet`, tries and B-trees                         | 14       | 6        |
+| 10  | [Inside Graphs](10-inside-graphs.html)                       | Representations and when each wins, BFS and DFS, cycle detection, Dijkstra and where it breaks, topological sort, Union-Find, minimum spanning trees | 14       | 6        |
 
-116 sections and 53 diagrams in total.
+130 sections and 59 diagrams in total.
 
 ## How they're built
 

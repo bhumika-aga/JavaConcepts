@@ -1,0 +1,3003 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Graphs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">Foundations</div>
+          <a href="#anatomy">Anatomy of a graph</a>
+          <a href="#represent">Representations</a>
+          <a href="#modelling">Modelling one in Java</a>
+          <div class="grp">Walking it</div>
+          <a href="#traversal">BFS and DFS</a>
+          <a href="#cycles">Detecting cycles</a>
+          <a href="#components">Connected components</a>
+          <div class="grp">Shortest paths</div>
+          <a href="#dijkstra">Dijkstra</a>
+          <a href="#negative">When Dijkstra fails</a>
+          <div class="grp">Ordering &amp; spanning</div>
+          <a href="#toposort">Topological sort</a>
+          <a href="#unionfind">Union-Find</a>
+          <a href="#mst">Minimum spanning tree</a>
+          <div class="grp">Reference</div>
+          <a href="#libraries">Libraries</a>
+          <a href="#complexity">Complexity</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            graphs in java &middot; from adjacency to dijkstra
+          </p>
+          <h1>Inside Graphs</h1>
+          <p class="dek">
+            A tree is a graph that promised not to have cycles. Drop that
+            promise and you get the structure behind maps, dependencies, social
+            networks and build systems — plus one new obligation:
+            <em>remember where you've been</em>.
+          </p>
+        </header>
+
+        <!-- ============ ANATOMY ============ -->
+        <section id="anatomy">
+          <h2>Anatomy of a graph</h2>
+          <p class="lede">
+            Vertices joined by edges. That's the whole definition — every
+            distinction below is about what the edges are allowed to do.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="An undirected graph beside a directed weighted graph containing a cycle, with degree and neighbour terminology labelled"
+              >
+                <defs>
+                  <marker
+                    id="ga"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    UNDIRECTED
+                  </text>
+
+                  <line
+                    x1="70"
+                    y1="70"
+                    x2="160"
+                    y2="56"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="70"
+                    y1="70"
+                    x2="96"
+                    y2="150"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="160"
+                    y1="56"
+                    x2="196"
+                    y2="140"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <line
+                    x1="96"
+                    y1="150"
+                    x2="196"
+                    y2="140"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+
+                  <circle
+                    cx="62"
+                    cy="68"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="62"
+                    y="73"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="168"
+                    cy="52"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="168"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="90"
+                    cy="158"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="90"
+                    y="163"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+                  <circle
+                    cx="202"
+                    cy="146"
+                    r="19"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="202"
+                    y="151"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    D
+                  </text>
+
+                  <text x="12" y="202" font-size="10.5" fill="var(--ink-soft)">
+                    edges go both ways
+                  </text>
+                  <text x="12" y="220" font-size="10.5" fill="var(--ink-soft)">
+                    degree(A) = 2
+                  </text>
+
+                  <line
+                    x1="255"
+                    y1="20"
+                    x2="255"
+                    y2="228"
+                    stroke="var(--rule)"
+                    stroke-width="1.5"
+                  />
+
+                  <text
+                    x="278"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    DIRECTED + WEIGHTED
+                  </text>
+
+                  <line
+                    x1="345"
+                    y1="62"
+                    x2="418"
+                    y2="52"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ga)"
+                  />
+                  <line
+                    x1="432"
+                    y1="72"
+                    x2="462"
+                    y2="132"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ga)"
+                  />
+                  <line
+                    x1="448"
+                    y1="152"
+                    x2="368"
+                    y2="160"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ga)"
+                  />
+                  <line
+                    x1="348"
+                    y1="140"
+                    x2="332"
+                    y2="86"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                    marker-end="url(#ga)"
+                  />
+
+                  <circle
+                    cx="326"
+                    cy="66"
+                    r="19"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="326"
+                    y="71"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="438"
+                    cy="50"
+                    r="19"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="438"
+                    y="55"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="352"
+                    cy="160"
+                    r="19"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="352"
+                    y="165"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    C
+                  </text>
+                  <circle
+                    cx="470"
+                    cy="148"
+                    r="19"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="470"
+                    y="153"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    D
+                  </text>
+
+                  <text
+                    x="376"
+                    y="44"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    5
+                  </text>
+                  <text
+                    x="458"
+                    y="104"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    2
+                  </text>
+                  <text
+                    x="402"
+                    y="172"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    7
+                  </text>
+                  <text
+                    x="322"
+                    y="116"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    1
+                  </text>
+
+                  <text
+                    x="278"
+                    y="202"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    A→B→D→C→A is a cycle
+                  </text>
+                  <text x="278" y="220" font-size="10.5" fill="var(--ink-soft)">
+                    in-degree(A) = 1, out-degree(A) = 1
+                  </text>
+
+                  <text
+                    x="530"
+                    y="52"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    no cycles + connected
+                  </text>
+                  <text x="530" y="68" font-size="10.5" fill="var(--ink-soft)">
+                    = a tree
+                  </text>
+                  <text
+                    x="530"
+                    y="96"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    directed, no cycles
+                  </text>
+                  <text x="530" y="112" font-size="10.5" fill="var(--ink-soft)">
+                    = a DAG
+                  </text>
+                  <text
+                    x="530"
+                    y="140"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    E ≈ V
+                  </text>
+                  <text x="530" y="156" font-size="10.5" fill="var(--ink-soft)">
+                    = sparse
+                  </text>
+                  <text
+                    x="530"
+                    y="176"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    E ≈ V²
+                  </text>
+                  <text x="530" y="192" font-size="10.5" fill="var(--ink-soft)">
+                    = dense
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>A tree is the special case.</b> Connected, undirected, no
+              cycles, exactly V−1 edges — see
+              <a href="09-inside-trees.html">Inside Trees</a>. Everything a
+              graph adds is the possibility of coming back to where you started.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ REPRESENT ============ -->
+        <section id="represent">
+          <h2>Representations</h2>
+          <p class="lede">
+            The same graph, stored three ways. The choice is decided by one
+            question: <strong>is your graph sparse or dense?</strong>
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="One graph shown as an adjacency list and as an adjacency matrix, with their space and lookup costs compared"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="18" font-size="10.5" fill="var(--ink-faint)">
+                    the graph
+                  </text>
+                  <line
+                    x1="60"
+                    y1="58"
+                    x2="108"
+                    y2="90"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="60"
+                    y1="58"
+                    x2="60"
+                    y2="106"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="112"
+                    y1="108"
+                    x2="70"
+                    y2="122"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="52"
+                    cy="50"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="52"
+                    y="55"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="120"
+                    cy="98"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="120"
+                    y="103"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="56"
+                    cy="122"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="56"
+                    y="127"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    C
+                  </text>
+
+                  <text
+                    x="170"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    ADJACENCY LIST
+                  </text>
+                  <rect
+                    x="164"
+                    y="28"
+                    width="180"
+                    height="94"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text x="180" y="52" font-size="11" fill="var(--val)">
+                    A → [B, C]
+                  </text>
+                  <text x="180" y="74" font-size="11" fill="var(--val)">
+                    B → [A, C]
+                  </text>
+                  <text x="180" y="96" font-size="11" fill="var(--val)">
+                    C → [A, B]
+                  </text>
+                  <text
+                    x="164"
+                    y="142"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    space O(V + E)
+                  </text>
+                  <text x="164" y="160" font-size="10.5" fill="var(--ink-soft)">
+                    neighbours: O(degree)
+                  </text>
+                  <text x="164" y="178" font-size="10.5" fill="var(--ink-soft)">
+                    has edge? O(degree)
+                  </text>
+                  <text
+                    x="164"
+                    y="204"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    use for sparse
+                  </text>
+                  <text x="164" y="220" font-size="10.5" fill="var(--good)">
+                    — almost always
+                  </text>
+
+                  <text
+                    x="400"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    ADJACENCY MATRIX
+                  </text>
+                  <rect
+                    x="394"
+                    y="28"
+                    width="180"
+                    height="94"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text x="428" y="46" font-size="10.5" fill="var(--key)">
+                    A B C
+                  </text>
+                  <text x="404" y="66" font-size="10.5" fill="var(--key)">
+                    A 0 1 1
+                  </text>
+                  <text x="404" y="86" font-size="10.5" fill="var(--key)">
+                    B 1 0 1
+                  </text>
+                  <text x="404" y="106" font-size="10.5" fill="var(--key)">
+                    C 1 1 0
+                  </text>
+                  <text
+                    x="394"
+                    y="142"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    space O(V²)
+                  </text>
+                  <text x="394" y="160" font-size="10.5" fill="var(--ink-soft)">
+                    neighbours: O(V)
+                  </text>
+                  <text
+                    x="394"
+                    y="178"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    has edge? O(1)
+                  </text>
+                  <text
+                    x="394"
+                    y="204"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    use for dense
+                  </text>
+                  <text x="394" y="220" font-size="10.5" fill="var(--key)">
+                    — or tiny graphs
+                  </text>
+
+                  <text
+                    x="596"
+                    y="46"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    EDGE LIST
+                  </text>
+                  <text x="596" y="66" font-size="10" fill="var(--ink-soft)">
+                    [(A,B), (A,C),
+                  </text>
+                  <text x="596" y="82" font-size="10" fill="var(--ink-soft)">
+                    (B,C)]
+                  </text>
+                  <text x="596" y="108" font-size="10" fill="var(--ink-soft)">
+                    space O(E)
+                  </text>
+                  <text x="596" y="132" font-size="10" fill="var(--ink-soft)">
+                    what Kruskal
+                  </text>
+                  <text x="596" y="148" font-size="10" fill="var(--ink-soft)">
+                    wants
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>A million users with fifty friends each:</b> the list needs ~50
+              million entries, the matrix needs 10<sup>12</sup>. Real-world
+              graphs are overwhelmingly sparse, which is why the adjacency list
+              is the default.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ MODELLING ============ -->
+        <section id="modelling">
+          <h2>Modelling one in Java</h2>
+          <p class="lede">
+            There is no <code>Graph</code> in the JDK. You build one out of a
+            <code>Map</code> — and that's usually all you need.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>In the JDK</dt>
+              <dd class="no">No graph type</dd>
+            </div>
+            <div>
+              <dt>The idiom</dt>
+              <dd>Map&lt;V, List&lt;V&gt;&gt;</dd>
+            </div>
+            <div>
+              <dt>Vertices need</dt>
+              <dd>equals + hashCode</dd>
+            </div>
+            <div>
+              <dt>Undirected edge</dt>
+              <dd>Add it twice</dd>
+            </div>
+            <div>
+              <dt>Libraries</dt>
+              <dd>JGraphT, Guava</dd>
+            </div>
+          </dl>
+
+          <div class="code">
+            <pre><span class="c">// The whole data structure, for an unweighted graph</span>
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">List</span>&lt;<span class="t">String</span>&gt;&gt; g = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+
+<span class="k">void</span> addEdge(<span class="t">String</span> a, <span class="t">String</span> b) {
+    g.computeIfAbsent(a, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(b);
+    g.computeIfAbsent(b, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(a);   <span class="c">// ← undirected: BOTH ways</span>
+}
+<span class="c">// For a directed graph, delete the second line. That is the only difference.</span>
+
+<span class="c">// Weighted — an edge becomes a record</span>
+<span class="k">record</span> <span class="t">Edge</span>(<span class="t">String</span> to, <span class="k">int</span> weight) { }
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">List</span>&lt;<span class="t">Edge</span>&gt;&gt; weighted = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+
+<span class="c">// Neighbours of a vertex that may not be in the map at all</span>
+<span class="k">for</span> (<span class="t">String</span> next : g.getOrDefault(node, <span class="t">List</span>.of())) { … }</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Your vertex type is a Map key</span>
+            <p>
+              Everything from
+              <a href="01-inside-java-maps.html">Inside Java Maps</a> applies:
+              the vertex needs a correct <code>equals</code>/<code
+                >hashCode</code
+              >
+              pair, and it must be <strong>immutable</strong>. Mutate a vertex
+              after inserting it and the graph loses track of it — present in
+              <code>size()</code>, unreachable by lookup. A
+              <code>record</code> is the natural choice.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ TRAVERSAL ============ -->
+        <section id="traversal">
+          <h2>BFS and DFS</h2>
+          <p class="lede">
+            Same algorithm, different container. Swap the queue for a stack and
+            breadth-first becomes depth-first — and the
+            <strong
+              >visited set is what stops a cycle from looping forever</strong
+            >.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 260"
+                role="img"
+                aria-label="The same graph traversed breadth-first with a queue and depth-first with a stack, producing different visit orders"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <line
+                    x1="112"
+                    y1="52"
+                    x2="70"
+                    y2="100"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="120"
+                    y1="52"
+                    x2="160"
+                    y2="100"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="62"
+                    y1="130"
+                    x2="52"
+                    y2="168"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="76"
+                    y1="132"
+                    x2="112"
+                    y2="168"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="166"
+                    y1="130"
+                    x2="140"
+                    y2="170"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="116"
+                    cy="44"
+                    r="18"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="116"
+                    y="49"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="58"
+                    cy="114"
+                    r="18"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="58"
+                    y="119"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="172"
+                    cy="114"
+                    r="18"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="172"
+                    y="119"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    C
+                  </text>
+                  <circle
+                    cx="46"
+                    cy="184"
+                    r="18"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="46"
+                    y="189"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    D
+                  </text>
+                  <circle
+                    cx="126"
+                    cy="184"
+                    r="18"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="126"
+                    y="189"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    E
+                  </text>
+
+                  <text x="12" y="226" font-size="10.5" fill="var(--ink-faint)">
+                    E is reachable from both B and C
+                  </text>
+
+                  <rect
+                    x="240"
+                    y="34"
+                    width="230"
+                    height="80"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="256"
+                    y="56"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    BFS — a QUEUE
+                  </text>
+                  <text
+                    x="256"
+                    y="78"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A B C D E
+                  </text>
+                  <text x="256" y="98" font-size="10" fill="var(--val)">
+                    level by level, outward
+                  </text>
+
+                  <rect
+                    x="240"
+                    y="126"
+                    width="230"
+                    height="80"
+                    rx="7"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="256"
+                    y="148"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    DFS — a STACK
+                  </text>
+                  <text
+                    x="256"
+                    y="170"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    A C E B D
+                  </text>
+                  <text x="256" y="190" font-size="10" fill="var(--tree)">
+                    one path to the end, then back
+                  </text>
+
+                  <text
+                    x="492"
+                    y="56"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    BFS gives the
+                  </text>
+                  <text
+                    x="492"
+                    y="72"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    FEWEST-EDGE path
+                  </text>
+                  <text x="492" y="88" font-size="10" fill="var(--ink-soft)">
+                    on unweighted graphs
+                  </text>
+
+                  <text
+                    x="492"
+                    y="148"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    DFS suits cycles,
+                  </text>
+                  <text
+                    x="492"
+                    y="164"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    topo sort, components
+                  </text>
+
+                  <rect
+                    x="240"
+                    y="222"
+                    width="446"
+                    height="28"
+                    rx="6"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="463"
+                    y="241"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    no visited set → a cycle loops forever
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The container is the algorithm.</b> This is the same trick as
+              turning recursion into iteration in
+              <a href="04-inside-stacks-and-queues.html"
+                >Inside Stacks and Queues</a
+              >
+              — the only change is which end you take work from.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="c">// BFS — shortest path by edge count on an unweighted graph</span>
+<span class="t">Deque</span>&lt;<span class="t">String</span>&gt; queue = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+<span class="t">Set</span>&lt;<span class="t">String</span>&gt; seen = <span class="k">new</span> <span class="t">HashSet</span>&lt;&gt;();
+
+queue.add(start);
+seen.add(start);                       <span class="c">// ← mark on ENQUEUE, not on dequeue</span>
+
+<span class="k">while</span> (!queue.isEmpty()) {
+    <span class="t">String</span> node = queue.poll();
+    visit(node);
+    <span class="k">for</span> (<span class="t">String</span> next : g.getOrDefault(node, <span class="t">List</span>.of())) {
+        <span class="k">if</span> (seen.add(next)) queue.add(next);    <span class="c">// add() returns false if present</span>
+    }
+}
+
+<span class="c">// DFS — same code, one word different</span>
+<span class="t">Deque</span>&lt;<span class="t">String</span>&gt; stack = <span class="k">new</span> <span class="t">ArrayDeque</span>&lt;&gt;();
+stack.push(start);
+<span class="k">while</span> (!stack.isEmpty()) {
+    <span class="t">String</span> node = stack.pop();
+    <span class="k">if</span> (!seen.add(node)) <span class="k">continue</span>;
+    visit(node);
+    <span class="k">for</span> (<span class="t">String</span> next : g.getOrDefault(node, <span class="t">List</span>.of())) stack.push(next);
+}</pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag"
+              >Mark visited when you enqueue, not when you dequeue</span
+            >
+            <p>
+              If you only mark on dequeue, a vertex reachable from several
+              others gets pushed once per incoming edge. On a dense graph that
+              turns a linear walk into an exponential one — the traversal still
+              terminates and still gives the right answer, so it looks correct
+              right up until the graph gets big.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ CYCLES ============ -->
+        <section id="cycles">
+          <h2>Detecting cycles</h2>
+          <p class="lede">
+            The test is different for directed and undirected graphs, and using
+            the wrong one gives confident wrong answers.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// UNDIRECTED — "visited, and not the node I came from"</span>
+<span class="k">boolean</span> hasCycle(<span class="t">String</span> node, <span class="t">String</span> parent, <span class="t">Set</span>&lt;<span class="t">String</span>&gt; seen) {
+    seen.add(node);
+    <span class="k">for</span> (<span class="t">String</span> next : g.get(node)) {
+        <span class="k">if</span> (next.equals(parent)) <span class="k">continue</span>;          <span class="c">// the edge we arrived on</span>
+        <span class="k">if</span> (seen.contains(next)) <span class="k">return true</span>;
+        <span class="k">if</span> (hasCycle(next, node, seen)) <span class="k">return true</span>;
+    }
+    <span class="k">return false</span>;
+}
+
+<span class="c">// DIRECTED — three colours. "Visited" is not enough.</span>
+<span class="c">//   WHITE = untouched   GREY = on the current path   BLACK = fully explored</span>
+<span class="k">boolean</span> hasCycle(<span class="t">String</span> node, <span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Colour</span>&gt; c) {
+    c.put(node, <span class="t">Colour</span>.GREY);
+    <span class="k">for</span> (<span class="t">String</span> next : g.getOrDefault(node, <span class="t">List</span>.of())) {
+        <span class="t">Colour</span> n = c.getOrDefault(next, <span class="t">Colour</span>.WHITE);
+        <span class="k">if</span> (n == <span class="t">Colour</span>.GREY) <span class="k">return true</span>;            <span class="c">// a back edge — a real cycle</span>
+        <span class="k">if</span> (n == <span class="t">Colour</span>.WHITE &amp;&amp; hasCycle(next, c)) <span class="k">return true</span>;
+    }
+    c.put(node, <span class="t">Colour</span>.BLACK);                       <span class="c">// off the path now</span>
+    <span class="k">return false</span>;
+}</pre>
+          </div>
+
+          <p>
+            In a directed graph, reaching an already-visited vertex is
+            <em>not</em> a cycle — a diamond <code>A→B→D, A→C→D</code> visits D
+            twice with no cycle anywhere. Only reaching a vertex that is still
+            <strong>on the current path</strong> proves one. That's what grey
+            means.
+          </p>
+        </section>
+
+        <!-- ============ COMPONENTS ============ -->
+        <section id="components">
+          <h2>Connected components</h2>
+          <p class="lede">
+            A graph need not be one piece. Counting the pieces is a loop around
+            your traversal.
+          </p>
+
+          <div class="code">
+            <pre><span class="k">int</span> components = <span class="n">0</span>;
+<span class="t">Set</span>&lt;<span class="t">String</span>&gt; seen = <span class="k">new</span> <span class="t">HashSet</span>&lt;&gt;();
+
+<span class="k">for</span> (<span class="t">String</span> v : g.keySet()) {
+    <span class="k">if</span> (seen.contains(v)) <span class="k">continue</span>;
+    bfsFrom(v, seen);        <span class="c">// marks everything reachable</span>
+    components++;            <span class="c">// one new island</span>
+}</pre>
+          </div>
+
+          <p>
+            For <strong>directed</strong> graphs the equivalent is a
+            <em>strongly</em> connected component — a group where every vertex
+            can reach every other. Kosaraju's algorithm finds them with two
+            passes of DFS (the second on the reversed graph); Tarjan's does it
+            in one pass using low-link numbers. Both are O(V+E), and both are
+            worth reaching for a library rather than writing from memory.
+          </p>
+        </section>
+
+        <!-- ============ DIJKSTRA ============ -->
+        <section id="dijkstra">
+          <h2>Dijkstra</h2>
+          <p class="lede">
+            Shortest path when edges have weights. BFS always expands the
+            nearest <em>hop</em>; Dijkstra always expands the cheapest known
+            <em>total</em>.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="Dijkstra settling vertices in order of cheapest known distance, showing a two-hop route beating a direct edge"
+              >
+                <defs>
+                  <marker
+                    id="gb"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <line
+                    x1="86"
+                    y1="94"
+                    x2="182"
+                    y2="60"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <line
+                    x1="86"
+                    y1="110"
+                    x2="184"
+                    y2="152"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="228"
+                    y1="70"
+                    x2="330"
+                    y2="98"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <line
+                    x1="232"
+                    y1="146"
+                    x2="332"
+                    y2="116"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+
+                  <circle
+                    cx="66"
+                    cy="102"
+                    r="21"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="66"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    S
+                  </text>
+                  <circle
+                    cx="204"
+                    cy="52"
+                    r="21"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="204"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A
+                  </text>
+                  <circle
+                    cx="208"
+                    cy="160"
+                    r="21"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="208"
+                    y="165"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="352"
+                    cy="106"
+                    r="21"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="352"
+                    y="111"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    T
+                  </text>
+
+                  <text
+                    x="126"
+                    y="62"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    1
+                  </text>
+                  <text
+                    x="126"
+                    y="146"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    4
+                  </text>
+                  <text
+                    x="276"
+                    y="76"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    2
+                  </text>
+                  <text
+                    x="284"
+                    y="146"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink-soft)"
+                  >
+                    1
+                  </text>
+
+                  <text
+                    x="12"
+                    y="200"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    S→A→T = 3 ✓ chosen
+                  </text>
+                  <text x="12" y="218" font-size="10.5" fill="var(--ink-soft)">
+                    S→B→T = 5
+                  </text>
+
+                  <rect
+                    x="410"
+                    y="28"
+                    width="276"
+                    height="168"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="426"
+                    y="52"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    the loop
+                  </text>
+                  <text x="426" y="76" font-size="10.5" fill="var(--ink-soft)">
+                    1 · take the cheapest unsettled
+                  </text>
+                  <text x="426" y="96" font-size="10.5" fill="var(--ink-soft)">
+                    2 · it is now final — settled
+                  </text>
+                  <text x="426" y="116" font-size="10.5" fill="var(--ink-soft)">
+                    3 · relax each of its edges
+                  </text>
+                  <text x="426" y="136" font-size="10.5" fill="var(--ink-soft)">
+                    4 · repeat
+                  </text>
+                  <text
+                    x="426"
+                    y="166"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    "cheapest first" is why
+                  </text>
+                  <text
+                    x="426"
+                    y="182"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    settled means final
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The greedy step is the whole proof.</b> Because every edge is
+              non-negative, nothing discovered later can undercut the cheapest
+              thing on the frontier — so popping it settles it permanently.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="k">record</span> <span class="t">Step</span>(<span class="t">String</span> node, <span class="k">int</span> dist) { }
+
+<span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; best = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+<span class="t">PriorityQueue</span>&lt;<span class="t">Step</span>&gt; pq =
+    <span class="k">new</span> <span class="t">PriorityQueue</span>&lt;&gt;(<span class="t">Comparator</span>.comparingInt(<span class="t">Step</span>::dist));
+
+best.put(start, <span class="n">0</span>);
+pq.add(<span class="k">new</span> <span class="t">Step</span>(start, <span class="n">0</span>));
+
+<span class="k">while</span> (!pq.isEmpty()) {
+    <span class="t">Step</span> cur = pq.poll();
+
+    <span class="c">// PriorityQueue has no decrease-key, so we push duplicates and</span>
+    <span class="c">// skip the stale ones here. This is the standard Java idiom.</span>
+    <span class="k">if</span> (cur.dist() &gt; best.getOrDefault(cur.node(), <span class="t">Integer</span>.MAX_VALUE)) <span class="k">continue</span>;
+
+    <span class="k">for</span> (<span class="t">Edge</span> e : weighted.getOrDefault(cur.node(), <span class="t">List</span>.of())) {
+        <span class="k">int</span> alt = cur.dist() + e.weight();
+        <span class="k">if</span> (alt &lt; best.getOrDefault(e.to(), <span class="t">Integer</span>.MAX_VALUE)) {
+            best.put(e.to(), alt);
+            pq.add(<span class="k">new</span> <span class="t">Step</span>(e.to(), alt));      <span class="c">// may be a duplicate — fine</span>
+        }
+    }
+}</pre>
+          </div>
+
+          <div class="note">
+            <span class="tag">Why the "stale entry" line exists</span>
+            <p>
+              Textbook Dijkstra calls <em>decrease-key</em> to reprioritise a
+              vertex already in the heap. <code>PriorityQueue</code> has no such
+              operation — <code>remove(Object)</code> is O(n). So the idiom is
+              to push a second entry with the better distance and discard the
+              outdated one when it surfaces. Leave that guard out and the
+              algorithm still works, but it re-expands settled vertices and
+              quietly loses its complexity guarantee.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ NEGATIVE ============ -->
+        <section id="negative">
+          <h2>When Dijkstra fails</h2>
+          <p class="lede">
+            One negative edge and it returns a wrong answer — with no error and
+            no warning.
+          </p>
+
+          <p>
+            Dijkstra settles a vertex the moment it pops it, on the reasoning
+            that no later path could be cheaper. A negative edge breaks exactly
+            that reasoning: a longer route can become cheaper further along,
+            after the vertex is already final.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Algorithm</th>
+                  <th>Handles</th>
+                  <th>Cost</th>
+                  <th>Use when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">BFS</td>
+                  <td>Unweighted</td>
+                  <td class="mono">O(V + E)</td>
+                  <td>All edges cost the same</td>
+                </tr>
+                <tr>
+                  <td class="name">Dijkstra</td>
+                  <td>Non-negative weights</td>
+                  <td class="mono">O((V + E) log V)</td>
+                  <td>The normal case</td>
+                </tr>
+                <tr>
+                  <td class="name">Bellman-Ford</td>
+                  <td>Negative weights</td>
+                  <td class="mono n">O(V · E)</td>
+                  <td>Negative edges exist; also detects negative cycles</td>
+                </tr>
+                <tr>
+                  <td class="name">A*</td>
+                  <td>Non-negative + a heuristic</td>
+                  <td class="mono">≤ Dijkstra</td>
+                  <td>You can estimate the remaining distance</td>
+                </tr>
+                <tr>
+                  <td class="name">Floyd-Warshall</td>
+                  <td>All pairs</td>
+                  <td class="mono n">O(V³)</td>
+                  <td>Small graph, every pair needed</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            <strong>A*</strong> is Dijkstra ordered by
+            <code>distance + estimate-to-goal</code> instead of distance alone.
+            The estimate must never overestimate — an
+            <em>admissible</em> heuristic — or you lose the guarantee of finding
+            the shortest path. Straight-line distance is the classic admissible
+            heuristic for map routing, because no road is ever shorter than the
+            crow's flight.
+          </p>
+        </section>
+
+        <!-- ============ TOPOSORT ============ -->
+        <section id="toposort">
+          <h2>Topological sort</h2>
+          <p class="lede">
+            Order the vertices of a DAG so every edge points forward. This is
+            what a build tool, a task scheduler and a module loader all run.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Kahn's algorithm repeatedly removing vertices with in-degree zero to produce a linear order"
+              >
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="18" font-size="10.5" fill="var(--ink-faint)">
+                    in-degree = how many edges point AT it
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="30"
+                    width="200"
+                    height="96"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text x="28" y="52" font-size="11" fill="var(--ink)">
+                    compile → test → package
+                  </text>
+                  <text x="28" y="74" font-size="11" fill="var(--ink)">
+                    compile → docs
+                  </text>
+                  <text x="28" y="102" font-size="10.5" fill="var(--ink-soft)">
+                    in: compile 0, test 1,
+                  </text>
+                  <text x="28" y="118" font-size="10.5" fill="var(--ink-soft)">
+                    package 1, docs 1
+                  </text>
+
+                  <rect
+                    x="236"
+                    y="30"
+                    width="196"
+                    height="96"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="252"
+                    y="52"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    peel off in-degree 0
+                  </text>
+                  <text x="252" y="74" font-size="10.5" fill="var(--val)">
+                    take compile → emit it
+                  </text>
+                  <text x="252" y="92" font-size="10.5" fill="var(--val)">
+                    its edges drop others to 0
+                  </text>
+                  <text x="252" y="112" font-size="10.5" fill="var(--val)">
+                    repeat until empty
+                  </text>
+
+                  <rect
+                    x="456"
+                    y="30"
+                    width="230"
+                    height="96"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="472"
+                    y="52"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    a valid order
+                  </text>
+                  <text
+                    x="472"
+                    y="76"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    compile, test, docs,
+                  </text>
+                  <text
+                    x="472"
+                    y="94"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    package
+                  </text>
+                  <text x="472" y="116" font-size="10" fill="var(--key)">
+                    not unique — several work
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="146"
+                    width="674"
+                    height="58"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="350"
+                    y="170"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    Vertices left over when nothing has in-degree 0 → a cycle.
+                  </text>
+                  <text
+                    x="350"
+                    y="190"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--hot)"
+                  >
+                    That is exactly the "circular dependency" your build tool
+                    reports.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Cycle detection comes free.</b> Kahn's algorithm emits every
+              vertex only if the graph is acyclic — so a short output
+              <em>is</em> the cycle report, which is why dependency tools
+              implement it this way.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="t">Map</span>&lt;<span class="t">String</span>, <span class="t">Integer</span>&gt; inDegree = <span class="k">new</span> <span class="t">HashMap</span>&lt;&gt;();
+g.keySet().forEach(v -&gt; inDegree.putIfAbsent(v, <span class="n">0</span>));
+g.values().stream().flatMap(<span class="t">List</span>::stream)
+ .forEach(v -&gt; inDegree.merge(v, <span class="n">1</span>, <span class="t">Integer</span>::sum));
+
+<span class="t">Deque</span>&lt;<span class="t">String</span>&gt; ready = inDegree.entrySet().stream()
+    .filter(e -&gt; e.getValue() == <span class="n">0</span>).map(<span class="t">Map</span>.<span class="t">Entry</span>::getKey)
+    .collect(<span class="t">Collectors</span>.toCollection(<span class="t">ArrayDeque</span>::<span class="k">new</span>));
+
+<span class="t">List</span>&lt;<span class="t">String</span>&gt; order = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+<span class="k">while</span> (!ready.isEmpty()) {
+    <span class="t">String</span> v = ready.poll();
+    order.add(v);
+    <span class="k">for</span> (<span class="t">String</span> next : g.getOrDefault(v, <span class="t">List</span>.of())) {
+        <span class="k">if</span> (inDegree.merge(next, -<span class="n">1</span>, <span class="t">Integer</span>::sum) == <span class="n">0</span>) ready.add(next);
+    }
+}
+
+<span class="k">if</span> (order.size() != inDegree.size())
+    <span class="k">throw new</span> <span class="t">IllegalStateException</span>(<span class="s">"cycle detected"</span>);</pre>
+          </div>
+        </section>
+
+        <!-- ============ UNIONFIND ============ -->
+        <section id="unionfind">
+          <h2>Union-Find</h2>
+          <p class="lede">
+            Not a graph traversal at all — a structure that answers "are these
+            two in the same group?" in effectively constant time. It's the
+            engine behind Kruskal's algorithm.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 210"
+                role="img"
+                aria-label="Two disjoint sets merging by pointing one root at the other, then path compression flattening the chain"
+              >
+                <defs>
+                  <marker
+                    id="gc"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--key)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text x="12" y="18" font-size="10.5" fill="var(--ink-faint)">
+                    each set is a tree; the root is its name
+                  </text>
+
+                  <circle
+                    cx="56"
+                    cy="52"
+                    r="17"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="56"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A
+                  </text>
+                  <line
+                    x1="56"
+                    y1="70"
+                    x2="56"
+                    y2="94"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="56"
+                    cy="112"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="56"
+                    y="117"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    B
+                  </text>
+                  <line
+                    x1="56"
+                    y1="128"
+                    x2="56"
+                    y2="150"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="56"
+                    cy="168"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="56"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+
+                  <circle
+                    cx="156"
+                    cy="52"
+                    r="17"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="156"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    D
+                  </text>
+                  <line
+                    x1="156"
+                    y1="70"
+                    x2="156"
+                    y2="94"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="156"
+                    cy="112"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="156"
+                    y="117"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    E
+                  </text>
+
+                  <line
+                    x1="196"
+                    y1="100"
+                    x2="248"
+                    y2="100"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                    marker-end="url(#gc)"
+                  />
+                  <text
+                    x="222"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    union
+                  </text>
+
+                  <circle
+                    cx="316"
+                    cy="52"
+                    r="17"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="316"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    A
+                  </text>
+                  <line
+                    x1="304"
+                    y1="68"
+                    x2="284"
+                    y2="94"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <line
+                    x1="328"
+                    y1="68"
+                    x2="352"
+                    y2="94"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="276"
+                    cy="112"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="276"
+                    y="117"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    B
+                  </text>
+                  <circle
+                    cx="360"
+                    cy="112"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="360"
+                    y="117"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    D
+                  </text>
+                  <line
+                    x1="276"
+                    y1="128"
+                    x2="276"
+                    y2="150"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="276"
+                    cy="168"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="276"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--val)"
+                  >
+                    C
+                  </text>
+                  <line
+                    x1="360"
+                    y1="128"
+                    x2="360"
+                    y2="150"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <circle
+                    cx="360"
+                    cy="168"
+                    r="16"
+                    fill="var(--surface-2)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="360"
+                    y="173"
+                    text-anchor="middle"
+                    font-size="11"
+                    fill="var(--tree)"
+                  >
+                    E
+                  </text>
+
+                  <text x="266" y="200" font-size="10.5" fill="var(--ink-soft)">
+                    smaller tree hangs off the bigger root
+                  </text>
+
+                  <rect
+                    x="424"
+                    y="40"
+                    width="262"
+                    height="140"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="440"
+                    y="64"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    path compression
+                  </text>
+                  <text x="440" y="88" font-size="10.5" fill="var(--key)">
+                    every find() re-points the nodes
+                  </text>
+                  <text x="440" y="106" font-size="10.5" fill="var(--key)">
+                    it walked straight at the root
+                  </text>
+                  <text
+                    x="440"
+                    y="132"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    with union by size, both
+                  </text>
+                  <text
+                    x="440"
+                    y="150"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    operations cost effectively
+                  </text>
+                  <text
+                    x="440"
+                    y="168"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    constant time
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Two one-line optimisations do all the work.</b> Without them
+              find is O(n); with both, the amortised cost is inverse-Ackermann —
+              under 5 for any input you will ever have.
+            </figcaption>
+          </figure>
+
+          <div class="code">
+            <pre><span class="k">class</span> <span class="t">UnionFind</span> {
+    <span class="k">private final int</span>[] parent, size;
+
+    <span class="t">UnionFind</span>(<span class="k">int</span> n) {
+        parent = <span class="t">IntStream</span>.range(<span class="n">0</span>, n).toArray();   <span class="c">// each its own root</span>
+        size   = <span class="k">new int</span>[n]; <span class="t">Arrays</span>.fill(size, <span class="n">1</span>);
+    }
+
+    <span class="k">int</span> find(<span class="k">int</span> x) {
+        <span class="k">if</span> (parent[x] != x) parent[x] = find(parent[x]);   <span class="c">// path compression</span>
+        <span class="k">return</span> parent[x];
+    }
+
+    <span class="k">boolean</span> union(<span class="k">int</span> a, <span class="k">int</span> b) {
+        <span class="k">int</span> ra = find(a), rb = find(b);
+        <span class="k">if</span> (ra == rb) <span class="k">return false</span>;                     <span class="c">// already together</span>
+        <span class="k">if</span> (size[ra] &lt; size[rb]) { <span class="k">int</span> t = ra; ra = rb; rb = t; }
+        parent[rb] = ra;                                <span class="c">// union by size</span>
+        size[ra] += size[rb];
+        <span class="k">return true</span>;
+    }
+}</pre>
+          </div>
+        </section>
+
+        <!-- ============ MST ============ -->
+        <section id="mst">
+          <h2>Minimum spanning tree</h2>
+          <p class="lede">
+            The cheapest set of edges that keeps every vertex connected. Two
+            algorithms, both greedy, both correct.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th class="name">Kruskal</th>
+                  <th class="name">Prim</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Greedy on</td>
+                  <td>Globally cheapest edge</td>
+                  <td>Cheapest edge leaving the built tree</td>
+                </tr>
+                <tr>
+                  <td>Needs</td>
+                  <td>Union-Find + sorted edges</td>
+                  <td>A PriorityQueue</td>
+                </tr>
+                <tr>
+                  <td>Cost</td>
+                  <td class="mono">O(E log E)</td>
+                  <td class="mono">O(E log V)</td>
+                </tr>
+                <tr>
+                  <td>Suits</td>
+                  <td>Sparse graphs, edge lists</td>
+                  <td>Dense graphs, adjacency lists</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// Kruskal — sort every edge, take it unless it closes a cycle</span>
+edges.sort(<span class="t">Comparator</span>.comparingInt(<span class="t">Edge</span>::weight));
+<span class="t">UnionFind</span> uf = <span class="k">new</span> <span class="t">UnionFind</span>(vertexCount);
+<span class="t">List</span>&lt;<span class="t">Edge</span>&gt; mst = <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;();
+
+<span class="k">for</span> (<span class="t">Edge</span> e : edges) {
+    <span class="k">if</span> (uf.union(e.from(), e.to())) mst.add(e);   <span class="c">// false ⇒ would form a cycle</span>
+    <span class="k">if</span> (mst.size() == vertexCount - <span class="n">1</span>) <span class="k">break</span>;       <span class="c">// a spanning tree, by definition</span>
+}</pre>
+          </div>
+
+          <p>
+            That <code>V − 1</code> is not a coincidence: a spanning tree of V
+            vertices always has exactly V−1 edges, which is the same fact from
+            <a href="09-inside-trees.html">Inside Trees</a> read backwards.
+          </p>
+        </section>
+
+        <!-- ============ LIBRARIES ============ -->
+        <section id="libraries">
+          <h2>Libraries</h2>
+          <p class="lede">
+            Hand-rolling BFS is fine. Hand-rolling Tarjan's algorithm from
+            memory at 2am is not.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Option</th>
+                  <th>Gives you</th>
+                  <th>Reach for it when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Map&lt;V, List&lt;V&gt;&gt;</td>
+                  <td>Everything you write yourself</td>
+                  <td>Traversals, simple paths — most of the time</td>
+                </tr>
+                <tr>
+                  <td class="name">Guava common.graph</td>
+                  <td>Graph, ValueGraph, Network types</td>
+                  <td>You want a real graph API without algorithms</td>
+                </tr>
+                <tr>
+                  <td class="name">JGraphT</td>
+                  <td>Dozens of algorithms, generics-first</td>
+                  <td>SCC, max-flow, matching, planarity</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Guava deliberately ships the data types without the algorithms;
+            JGraphT ships both. If you find yourself writing max-flow or
+            strongly-connected-components by hand, that's the signal to add the
+            dependency.
+          </p>
+        </section>
+
+        <!-- ============ COMPLEXITY ============ -->
+        <section id="complexity">
+          <h2>Complexity</h2>
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operation</th>
+                  <th>Adjacency list</th>
+                  <th>Adjacency matrix</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Space</td>
+                  <td class="mono y">O(V + E)</td>
+                  <td class="mono n">O(V²)</td>
+                </tr>
+                <tr>
+                  <td>Add edge</td>
+                  <td class="mono">O(1)</td>
+                  <td class="mono">O(1)</td>
+                </tr>
+                <tr>
+                  <td>Is there an edge?</td>
+                  <td class="mono">O(degree)</td>
+                  <td class="mono y">O(1)</td>
+                </tr>
+                <tr>
+                  <td>List neighbours</td>
+                  <td class="mono y">O(degree)</td>
+                  <td class="mono n">O(V)</td>
+                </tr>
+                <tr>
+                  <td>BFS / DFS</td>
+                  <td class="mono y">O(V + E)</td>
+                  <td class="mono n">O(V²)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Picking an algorithm</h4>
+          <ul class="pick">
+            <li>
+              <span class="want">Fewest hops, unweighted</span
+              ><span class="use">BFS</span>
+            </li>
+            <li>
+              <span class="want">Cheapest path, non-negative weights</span
+              ><span class="use">Dijkstra</span>
+            </li>
+            <li>
+              <span class="want">Some edges are negative</span
+              ><span class="use">Bellman-Ford</span>
+            </li>
+            <li>
+              <span class="want">Routing with a distance estimate</span
+              ><span class="use">A*</span>
+            </li>
+            <li>
+              <span class="want">Valid build or task order</span
+              ><span class="use">topological sort</span>
+            </li>
+            <li>
+              <span class="want">Does a dependency cycle exist?</span
+              ><span class="use">three-colour DFS</span>
+            </li>
+            <li>
+              <span class="want">Are these two connected?</span
+              ><span class="use">Union-Find</span>
+            </li>
+            <li>
+              <span class="want">Cheapest network joining everything</span
+              ><span class="use">Kruskal / Prim</span>
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Forgetting the visited set</h3>
+          <p>
+            The one difference between tree code and graph code. A tree has no
+            cycles, so tree traversal needs no memory of where it's been; a
+            graph does, and without it the first cycle loops forever. If you
+            adapted tree code and it hangs, this is why.
+          </p>
+
+          <h3>Marking visited on dequeue</h3>
+          <p>
+            Discussed above and worth repeating, because the symptom is
+            performance rather than wrongness: the answer stays correct while
+            the work becomes exponential, so it passes every small test and dies
+            on real data.
+          </p>
+
+          <h3>Running Dijkstra on negative edges</h3>
+          <p>
+            No exception, no warning — just a wrong shortest path. If weights
+            can be negative (refunds, elevation changes, penalties), you need
+            Bellman-Ford. Worth an explicit guard if the weights come from
+            outside your code.
+          </p>
+
+          <h3>Adding an undirected edge once</h3>
+          <div class="code">
+            <pre><span class="c">// ✗ half an edge — B never knows about A</span>
+g.computeIfAbsent(a, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(b);
+
+<span class="c">// ✓ both directions</span>
+g.computeIfAbsent(b, k -&gt; <span class="k">new</span> <span class="t">ArrayList</span>&lt;&gt;()).add(a);</pre>
+          </div>
+          <p>
+            Traversals from A still find B, so it looks fine until something
+            starts at B.
+          </p>
+
+          <h3>Recursive DFS on a large graph</h3>
+          <p>
+            Recursion depth follows the longest path. A chain of a million
+            vertices overflows the stack, and
+            <code>StackOverflowError</code> isn't something you can usefully
+            recover from. Use an explicit <code>Deque</code> when the graph's
+            shape isn't yours to guarantee.
+          </p>
+
+          <h3>Mutable vertices</h3>
+          <p>
+            Your vertex is a <code>HashMap</code> key. Change a field that
+            <code>hashCode()</code> reads and it becomes unreachable — the same
+            failure as in
+            <a href="01-inside-java-maps.html">Inside Java Maps</a>, reached by
+            a different road. Use records.
+          </p>
+
+          <h3>An adjacency matrix for a sparse graph</h3>
+          <p>
+            A hundred thousand vertices with a handful of edges each needs
+            10<sup>10</sup> matrix cells — tens of gigabytes to store almost
+            entirely zeros. The matrix only pays for itself when the graph is
+            genuinely dense or very small.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Model it as <code>Map&lt;V, List&lt;V&gt;&gt;</code>, keep
+              vertices immutable, and never traverse without a visited set. BFS
+              for fewest hops, Dijkstra for cheapest with non-negative weights,
+              topological sort for ordering, Union-Find for connectivity. Reach
+              for JGraphT the moment the algorithm has a person's name you'd
+              have to look up.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
