@@ -1,0 +1,3538 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inside Microservices</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">The decision</div>
+          <a href="#trade">The real trade</a>
+          <a href="#when">When not to</a>
+          <a href="#boundaries">Drawing boundaries</a>
+          <div class="grp">Talking</div>
+          <a href="#comms">Sync vs async</a>
+          <a href="#edge">Gateway and discovery</a>
+          <div class="grp">Failing well</div>
+          <a href="#cascade">Cascading failure</a>
+          <a href="#resilience">Resilience patterns</a>
+          <div class="grp">Data</div>
+          <a href="#consistency">CAP and consistency</a>
+          <a href="#saga">Sagas</a>
+          <a href="#outbox">The outbox</a>
+          <div class="grp">System design</div>
+          <a href="#scaling">Scaling</a>
+          <a href="#caching">Caching</a>
+          <a href="#observe">Observability</a>
+          <a href="#deploy">Deploying</a>
+          <a href="#interview">Designing a system</a>
+          <a href="#numbers">Numbers to know</a>
+          <div class="grp">Reference</div>
+          <a href="#java">The Java stack</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">
+            microservices &middot; and the system design underneath
+          </p>
+          <h1>Inside Microservices</h1>
+          <p class="dek">
+            Splitting a system into services doesn't remove complexity — it
+            <em>moves it onto the network</em>, where calls can be slow, fail
+            halfway, or arrive twice. Everything worth knowing about
+            microservices is a technique for living with that move.
+          </p>
+        </header>
+
+        <!-- ============ TRADE ============ -->
+        <section id="trade">
+          <h2>The real trade</h2>
+          <p class="lede">
+            A monolith calls a method. A microservice makes a network request.
+            That one substitution is the source of every benefit and every
+            problem that follows.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 250"
+                role="img"
+                aria-label="A method call inside a monolith compared with a network request between two services, listing what can go wrong with each"
+              >
+                <defs>
+                  <marker
+                    id="m1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    MONOLITH — one process
+                  </text>
+                  <rect
+                    x="12"
+                    y="28"
+                    width="300"
+                    height="100"
+                    rx="9"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <rect
+                    x="30"
+                    y="54"
+                    width="100"
+                    height="44"
+                    rx="6"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="80"
+                    y="81"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Orders
+                  </text>
+                  <g color="var(--val)">
+                    <line
+                      x1="134"
+                      y1="76"
+                      x2="186"
+                      y2="76"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m1)"
+                    />
+                  </g>
+                  <text
+                    x="160"
+                    y="66"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    method
+                  </text>
+                  <rect
+                    x="192"
+                    y="54"
+                    width="100"
+                    height="44"
+                    rx="6"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="242"
+                    y="81"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Payments
+                  </text>
+
+                  <text x="12" y="152" font-size="10.5" fill="var(--ink-soft)">
+                    nanoseconds · never half-fails
+                  </text>
+                  <text x="12" y="170" font-size="10.5" fill="var(--ink-soft)">
+                    one transaction · one deploy
+                  </text>
+                  <text
+                    x="12"
+                    y="194"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    but: one team's change can
+                  </text>
+                  <text
+                    x="12"
+                    y="210"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    block everyone's release
+                  </text>
+
+                  <line
+                    x1="345"
+                    y1="20"
+                    x2="345"
+                    y2="232"
+                    stroke="var(--rule)"
+                    stroke-width="1.5"
+                  />
+
+                  <text
+                    x="368"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    MICROSERVICES — two processes
+                  </text>
+                  <rect
+                    x="368"
+                    y="46"
+                    width="112"
+                    height="60"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="424"
+                    y="81"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Orders
+                  </text>
+                  <g color="var(--hot)">
+                    <line
+                      x1="484"
+                      y1="76"
+                      x2="568"
+                      y2="76"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="7 5"
+                      marker-end="url(#m1)"
+                    />
+                  </g>
+                  <text
+                    x="526"
+                    y="66"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    network
+                  </text>
+                  <rect
+                    x="574"
+                    y="46"
+                    width="112"
+                    height="60"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="630"
+                    y="81"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    Payments
+                  </text>
+
+                  <text x="368" y="136" font-size="10.5" fill="var(--hot)">
+                    milliseconds · can time out
+                  </text>
+                  <text x="368" y="154" font-size="10.5" fill="var(--hot)">
+                    can succeed but look failed
+                  </text>
+                  <text x="368" y="172" font-size="10.5" fill="var(--hot)">
+                    no shared transaction
+                  </text>
+                  <text
+                    x="368"
+                    y="196"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    but: teams deploy and scale
+                  </text>
+                  <text
+                    x="368"
+                    y="212"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    independently
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b
+                >You are buying organisational independence with technical
+                difficulty.</b
+              >
+              Microservices are primarily a solution to a
+              <em>people</em> problem — many teams stepping on one codebase —
+              and they charge you in distributed-systems problems to solve it.
+            </figcaption>
+          </figure>
+
+          <p>
+            The most dangerous line in that diagram is "can succeed but look
+            failed". The payment went through, the response was lost, and the
+            caller retries. Every service that receives a request over a network
+            must be designed to receive it <strong>twice</strong>.
+          </p>
+        </section>
+
+        <!-- ============ WHEN ============ -->
+        <section id="when">
+          <h2>When not to</h2>
+          <p class="lede">
+            The most common microservices mistake is adopting them. Most systems
+            should start as a well-structured monolith.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Signal</th>
+                  <th>Points to</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>One or two teams</td>
+                  <td class="y">Modular monolith</td>
+                </tr>
+                <tr>
+                  <td>Domain not yet understood</td>
+                  <td class="y">Monolith — you'll draw the boundaries wrong</td>
+                </tr>
+                <tr>
+                  <td>No automated deploys or monitoring</td>
+                  <td class="y">Monolith — you can't operate services yet</td>
+                </tr>
+                <tr>
+                  <td>Many teams blocked on one release train</td>
+                  <td class="mid">Microservices</td>
+                </tr>
+                <tr>
+                  <td>One part needs 50× the scale of the rest</td>
+                  <td class="mid">Extract that part</td>
+                </tr>
+                <tr>
+                  <td>Parts need different languages or runtimes</td>
+                  <td class="mid">Microservices</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">The distributed monolith</span>
+            <p>
+              The worst outcome: services that must be deployed together, share
+              a database, and call each other synchronously in long chains. You
+              pay every cost of distribution — latency, partial failure, harder
+              debugging — and receive none of the independence. If changing one
+              service routinely requires changing three others in lockstep, this
+              is what you've built.
+            </p>
+          </div>
+
+          <p>
+            <strong>Conway's law</strong> is the useful lens: systems end up
+            mirroring the communication structure of the organisations that
+            build them. Service boundaries that cut across team boundaries fight
+            the organisation forever. Draw them along team lines.
+          </p>
+
+          <p>
+            If you have a monolith and genuinely need to split it, the
+            <strong>strangler fig</strong> pattern is the safe route: route one
+            capability at a time to a new service behind the same entry point,
+            leaving the rest in place, until the old system has nothing left to
+            do.
+          </p>
+        </section>
+
+        <!-- ============ BOUNDARIES ============ -->
+        <section id="boundaries">
+          <h2>Drawing boundaries</h2>
+          <p class="lede">
+            A good boundary means a service can change without its neighbours
+            noticing. The tool for finding them is Domain-Driven Design's
+            <strong>bounded context</strong>.
+          </p>
+
+          <p>
+            The same word means different things in different parts of a
+            business. To sales, a <em>Customer</em> is a lead with a pipeline
+            stage. To billing, it's a payment method and an invoice history. To
+            shipping, it's an address. Forcing one <code>Customer</code> class
+            to serve all three produces a model nobody can change safely. A
+            bounded context is the region inside which one meaning holds — and
+            that region is a candidate service.
+          </p>
+
+          <dl class="spec">
+            <div>
+              <dt>Boundary follows</dt>
+              <dd>Business capability</dd>
+            </div>
+            <div>
+              <dt>Not</dt>
+              <dd class="no">Technical layers</dd>
+            </div>
+            <div>
+              <dt>Owns</dt>
+              <dd>Its own data</dd>
+            </div>
+            <div>
+              <dt>Shared database</dt>
+              <dd class="no">Never</dd>
+            </div>
+            <div>
+              <dt>Team per service</dt>
+              <dd class="yes">Ideally</dd>
+            </div>
+          </dl>
+
+          <div class="note">
+            <span class="tag">Database per service is not optional</span>
+            <p>
+              If two services read the same table, neither can change its schema
+              without coordinating with the other — which is exactly the
+              coupling you split them to escape. Each service owns its data
+              outright, and everyone else gets it through the API or through
+              events. It's the rule that makes the rest work.
+            </p>
+          </div>
+
+          <p>
+            A common wrong split is by technical layer — a "database service", a
+            "validation service", a "UI service". Every feature then touches
+            every service, so nothing is independent. Split by what the business
+            does, not by how the code is layered.
+          </p>
+        </section>
+
+        <!-- ============ COMMS ============ -->
+        <section id="comms">
+          <h2>Sync vs async</h2>
+          <p class="lede">
+            Services talk two ways, and the choice decides how failures spread.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Synchronous — REST, gRPC</th>
+                  <th>Asynchronous — events, Kafka</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Caller waits?</td>
+                  <td>Yes</td>
+                  <td>No</td>
+                </tr>
+                <tr>
+                  <td>If callee is down</td>
+                  <td class="n">Caller fails too</td>
+                  <td class="y">Message waits in the log</td>
+                </tr>
+                <tr>
+                  <td>Coupling</td>
+                  <td>Temporal — both must be up</td>
+                  <td>Only to the event format</td>
+                </tr>
+                <tr>
+                  <td>Consistency</td>
+                  <td>Immediate</td>
+                  <td class="mid">Eventual</td>
+                </tr>
+                <tr>
+                  <td>Debugging</td>
+                  <td class="y">A stack of calls</td>
+                  <td class="n">Needs tracing</td>
+                </tr>
+                <tr>
+                  <td>Good for</td>
+                  <td>Queries, user-facing reads</td>
+                  <td>Things that happened, fan-out</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            A useful default: <strong>commands and queries</strong> that need an
+            answer now go synchronous; <strong>events</strong> announcing that
+            something already happened go asynchronous.
+            <code>OrderPlaced</code> is an event — billing, shipping and email
+            each react in their own time, and none of them blocks checkout.
+          </p>
+
+          <p>
+            REST is the lingua franca and easy to debug. gRPC is faster,
+            strongly typed through Protobuf, and supports streaming, at the cost
+            of tooling friction and being harder to call from a browser. The
+            async side is covered in depth in
+            <a href="06-inside-kafka.html"><strong>Inside Kafka</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ EDGE ============ -->
+        <section id="edge">
+          <h2>Gateway and discovery</h2>
+          <p class="lede">
+            Clients shouldn't know your service topology, and services shouldn't
+            hard-code each other's addresses.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="A client calling one API gateway that handles cross-cutting concerns and routes to services found through a registry"
+              >
+                <defs>
+                  <marker
+                    id="m2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="92"
+                    width="96"
+                    height="48"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="60"
+                    y="121"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    client
+                  </text>
+                  <line
+                    x1="112"
+                    y1="116"
+                    x2="148"
+                    y2="116"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#m2)"
+                  />
+
+                  <rect
+                    x="152"
+                    y="36"
+                    width="184"
+                    height="160"
+                    rx="9"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="244"
+                    y="60"
+                    text-anchor="middle"
+                    font-size="11.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    API GATEWAY
+                  </text>
+                  <text x="168" y="86" font-size="10.5" fill="var(--key)">
+                    · authenticate
+                  </text>
+                  <text x="168" y="106" font-size="10.5" fill="var(--key)">
+                    · rate limit
+                  </text>
+                  <text x="168" y="126" font-size="10.5" fill="var(--key)">
+                    · route by path
+                  </text>
+                  <text x="168" y="146" font-size="10.5" fill="var(--key)">
+                    · attach trace id
+                  </text>
+                  <text x="168" y="166" font-size="10.5" fill="var(--key)">
+                    · TLS termination
+                  </text>
+                  <text x="168" y="186" font-size="9.5" fill="var(--key)">
+                    keep business logic OUT
+                  </text>
+
+                  <line
+                    x1="340"
+                    y1="70"
+                    x2="410"
+                    y2="52"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#m2)"
+                  />
+                  <line
+                    x1="340"
+                    y1="116"
+                    x2="410"
+                    y2="116"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#m2)"
+                  />
+                  <line
+                    x1="340"
+                    y1="162"
+                    x2="410"
+                    y2="180"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#m2)"
+                  />
+
+                  <rect
+                    x="414"
+                    y="32"
+                    width="120"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    orders ×3
+                  </text>
+                  <rect
+                    x="414"
+                    y="96"
+                    width="120"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="121"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    users ×2
+                  </text>
+                  <rect
+                    x="414"
+                    y="160"
+                    width="120"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="185"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    catalog ×4
+                  </text>
+
+                  <rect
+                    x="562"
+                    y="80"
+                    width="124"
+                    height="72"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="624"
+                    y="104"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    registry
+                  </text>
+                  <text
+                    x="624"
+                    y="122"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--tree)"
+                  >
+                    who is healthy,
+                  </text>
+                  <text
+                    x="624"
+                    y="137"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--tree)"
+                  >
+                    and where
+                  </text>
+
+                  <text x="12" y="226" font-size="10.5" fill="var(--ink-soft)">
+                    Instances come and go; the registry tracks live addresses so
+                    nobody hard-codes one.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The gateway handles concerns every request shares.</b> Put
+              business logic there and it becomes a new monolith that every team
+              must change — the exact coupling you split to avoid.
+            </figcaption>
+          </figure>
+
+          <ul>
+            <li>
+              <strong>Server-side discovery</strong> — a load balancer or a
+              Kubernetes <code>Service</code> resolves the name for you. The
+              default in container platforms, and the one to prefer.
+            </li>
+            <li>
+              <strong>Client-side discovery</strong> — the caller asks a
+              registry such as Eureka and picks an instance itself. More
+              control, more logic in every client.
+            </li>
+            <li>
+              <strong>Backend-for-frontend (BFF)</strong> — a separate gateway
+              per client type, so the mobile app gets a lean aggregated payload
+              and the web app gets its own shape.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ CASCADE ============ -->
+        <section id="cascade">
+          <h2>Cascading failure</h2>
+          <p class="lede">
+            The defining failure of microservices: one slow dependency takes
+            down everything that calls it — not by crashing, but by holding
+            every thread hostage while it waits.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="A slow downstream service causing upstream services to exhaust their threads while waiting, spreading the outage backwards"
+              >
+                <defs>
+                  <marker
+                    id="m3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--hot)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="50"
+                    width="136"
+                    height="70"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="80"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    gateway
+                  </text>
+                  <text
+                    x="80"
+                    y="94"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    200/200 threads
+                  </text>
+                  <text
+                    x="80"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    waiting
+                  </text>
+
+                  <line
+                    x1="152"
+                    y1="85"
+                    x2="196"
+                    y2="85"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    marker-end="url(#m3)"
+                  />
+
+                  <rect
+                    x="200"
+                    y="50"
+                    width="136"
+                    height="70"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="268"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    orders
+                  </text>
+                  <text
+                    x="268"
+                    y="94"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    200/200 threads
+                  </text>
+                  <text
+                    x="268"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    waiting
+                  </text>
+
+                  <line
+                    x1="340"
+                    y1="85"
+                    x2="384"
+                    y2="85"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    marker-end="url(#m3)"
+                  />
+
+                  <rect
+                    x="388"
+                    y="50"
+                    width="136"
+                    height="70"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="456"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    payments
+                  </text>
+                  <text
+                    x="456"
+                    y="94"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    200/200 threads
+                  </text>
+                  <text
+                    x="456"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    waiting
+                  </text>
+
+                  <line
+                    x1="528"
+                    y1="85"
+                    x2="572"
+                    y2="85"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                    marker-end="url(#m3)"
+                  />
+
+                  <rect
+                    x="576"
+                    y="50"
+                    width="110"
+                    height="70"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="631"
+                    y="76"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    bank API
+                  </text>
+                  <text
+                    x="631"
+                    y="94"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    30s responses
+                  </text>
+                  <text
+                    x="631"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-soft)"
+                  >
+                    not down — slow
+                  </text>
+
+                  <text
+                    x="12"
+                    y="30"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    ← the outage spreads BACKWARDS, against the direction of the
+                    calls
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="146"
+                    width="674"
+                    height="80"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="28"
+                    y="170"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    Slow is worse than down.
+                  </text>
+                  <text x="28" y="190" font-size="10.5" fill="var(--ink-soft)">
+                    A dead service fails fast and frees the thread. A slow one
+                    holds it,
+                  </text>
+                  <text x="28" y="208" font-size="10.5" fill="var(--ink-soft)">
+                    and a fixed pool runs dry — so a healthy gateway starts
+                    refusing everyone.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Nothing here crashed.</b> Every service is running; every
+              thread is blocked waiting on the one below it. Timeouts, circuit
+              breakers and bulkheads each cut this chain at a different point.
+            </figcaption>
+          </figure>
+
+          <p>
+            Chains also multiply unreliability. Five services at 99.9%
+            availability, called in sequence, give <code>0.999⁵ ≈ 99.5%</code> —
+            roughly five times the downtime of any single one. Every synchronous
+            hop you add lowers the ceiling of the whole request.
+          </p>
+        </section>
+
+        <!-- ============ RESILIENCE ============ -->
+        <section id="resilience">
+          <h2>Resilience patterns</h2>
+          <p class="lede">
+            Four patterns, each cutting the cascade at a different point. You
+            need all of them, and the order you apply them in matters.
+          </p>
+
+          <h3>Timeouts — the one you can never skip</h3>
+          <p>
+            Every network call needs one. The default for many HTTP clients is
+            <em>infinite</em>, which is precisely how the cascade above happens.
+            Set the timeout from the dependency's real latency percentiles, not
+            a round number, and remember that a timeout doesn't mean the call
+            failed — only that you stopped waiting.
+          </p>
+
+          <h3>Retries — with backoff, jitter, and restraint</h3>
+          <div class="code">
+            <pre><span class="c">// ✗ Immediate retries turn a struggling service into a dead one.</span>
+<span class="c">//   Every client multiplies its load at the exact moment it's weakest.</span>
+
+<span class="c">// ✓ Exponential backoff with jitter, and a cap</span>
+<span class="k">long</span> delay = <span class="t">Math</span>.min(maxDelay, base * (<span class="n">1L</span> &lt;&lt; attempt));
+<span class="k">long</span> jittered = <span class="t">ThreadLocalRandom</span>.current().nextLong(delay);   <span class="c">// spread clients out</span>
+
+<span class="c">// Only retry what's safe to repeat — and make it safe with a key:</span>
+<span class="c">//   POST /payments   Idempotency-Key: 7f3a…</span>
+<span class="c">// the server stores the key and returns the original result on a repeat</span></pre>
+          </div>
+
+          <p>
+            Without jitter, every client that failed at the same moment retries
+            at the same moment, in synchronised waves — a <em>retry storm</em>.
+            Jitter spreads them out. And retries stack across layers: three
+            layers retrying three times each is 27 attempts on the bottom
+            service.
+          </p>
+
+          <h3>Circuit breaker — stop calling what's broken</h3>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="The three circuit breaker states: closed passes calls, open fails fast, half-open sends trial calls to test recovery"
+              >
+                <defs>
+                  <marker
+                    id="m4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="30"
+                    y="60"
+                    width="170"
+                    height="80"
+                    rx="10"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="115"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    CLOSED
+                  </text>
+                  <text
+                    x="115"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    calls pass through
+                  </text>
+                  <text
+                    x="115"
+                    y="124"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    failures are counted
+                  </text>
+
+                  <rect
+                    x="266"
+                    y="60"
+                    width="170"
+                    height="80"
+                    rx="10"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="351"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    OPEN
+                  </text>
+                  <text
+                    x="351"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    fail instantly
+                  </text>
+                  <text
+                    x="351"
+                    y="124"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--hot)"
+                  >
+                    no network call
+                  </text>
+
+                  <rect
+                    x="502"
+                    y="60"
+                    width="170"
+                    height="80"
+                    rx="10"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="587"
+                    y="88"
+                    text-anchor="middle"
+                    font-size="12"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    HALF-OPEN
+                  </text>
+                  <text
+                    x="587"
+                    y="108"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    let a few through
+                  </text>
+                  <text
+                    x="587"
+                    y="124"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    to test recovery
+                  </text>
+
+                  <g color="var(--hot)">
+                    <line
+                      x1="204"
+                      y1="84"
+                      x2="262"
+                      y2="84"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m4)"
+                    />
+                  </g>
+                  <text
+                    x="233"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    too many fail
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="440"
+                      y1="84"
+                      x2="498"
+                      y2="84"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m4)"
+                    />
+                  </g>
+                  <text
+                    x="469"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    after a wait
+                  </text>
+
+                  <g color="var(--val)">
+                    <path
+                      d="M587 144 C587 190, 115 190, 115 146"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m4)"
+                    />
+                  </g>
+                  <text
+                    x="351"
+                    y="204"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    trial calls succeed → close
+                  </text>
+
+                  <g color="var(--hot)">
+                    <path
+                      d="M540 56 C520 26, 380 26, 360 56"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 4"
+                      marker-end="url(#m4)"
+                    />
+                  </g>
+                  <text
+                    x="450"
+                    y="22"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    trial fails → open again
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Failing fast is the feature.</b> An open breaker returns an
+              error in microseconds instead of holding a thread for thirty
+              seconds — which frees the caller and gives the struggling
+              dependency room to recover instead of being hammered.
+            </figcaption>
+          </figure>
+
+          <h3>Bulkheads — contain the damage</h3>
+          <p>
+            Named after the watertight compartments in a ship. Give each
+            downstream dependency its own bounded thread pool or semaphore, so a
+            slow bank API can exhaust <em>its</em> pool without touching the
+            pool that serves product search.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Resilience4j — stacked in the order they should apply</span>
+<span class="k">@CircuitBreaker</span>(name = <span class="s">"bank"</span>, fallbackMethod = <span class="s">"queueForLater"</span>)
+<span class="k">@Retry</span>(name = <span class="s">"bank"</span>)
+<span class="k">@Bulkhead</span>(name = <span class="s">"bank"</span>)
+<span class="k">@TimeLimiter</span>(name = <span class="s">"bank"</span>)
+<span class="k">public</span> <span class="t">CompletableFuture</span>&lt;<span class="t">Receipt</span>&gt; charge(<span class="t">Payment</span> p) { … }
+
+<span class="c">// A fallback should degrade gracefully, not pretend:</span>
+<span class="c">//   serve cached data, queue the work, or return a clear "try later"</span></pre>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">These are proxy-based annotations</span>
+            <p>
+              Resilience4j's annotations work through Spring AOP, so they
+              inherit the self-invocation trap from
+              <a href="07-inside-spring.html">Inside Spring</a>: call
+              <code>this.charge()</code> from inside the same bean and no
+              breaker, retry or timeout applies. The annotation is present and
+              does nothing.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ CONSISTENCY ============ -->
+        <section id="consistency">
+          <h2>CAP and consistency</h2>
+          <p class="lede">
+            Once data lives in more than one place, you have to choose what
+            happens when those places can't talk to each other.
+          </p>
+
+          <p>
+            <strong>CAP</strong> says that during a network <em>partition</em> a
+            distributed system must choose between
+            <strong>consistency</strong> (every read sees the latest write, or
+            errors) and <strong>availability</strong> (every request gets a
+            response, possibly stale). Partitions aren't optional in real
+            networks, so the practical choice is C or A
+            <em>when they happen</em>.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Choose consistency (CP)</th>
+                  <th>Choose availability (AP)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>During a partition</td>
+                  <td>Refuse some requests</td>
+                  <td>Serve possibly stale data</td>
+                </tr>
+                <tr>
+                  <td>Suits</td>
+                  <td>Balances, inventory, bookings</td>
+                  <td>Feeds, likes, recommendations</td>
+                </tr>
+                <tr>
+                  <td>Examples</td>
+                  <td>ZooKeeper, etcd, most SQL setups</td>
+                  <td>Cassandra, DynamoDB (default)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            <strong>PACELC</strong> finishes the thought: <em>else</em>, when
+            there's no partition, you're still trading
+            <strong>latency</strong> against <strong>consistency</strong> —
+            because waiting for replicas to confirm costs time. That's the trade
+            you make on every normal request, which is why it matters more day
+            to day than CAP does.
+          </p>
+
+          <div class="note">
+            <span class="tag">Eventual consistency is a product decision</span>
+            <p>
+              It's often fine, and sometimes it isn't. A like count being two
+              seconds stale harms nobody. An account balance showing money
+              that's already been spent harms someone badly. Decide per piece of
+              data with the people who own the product, not globally as an
+              architecture choice.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ SAGA ============ -->
+        <section id="saga">
+          <h2>Sagas</h2>
+          <p class="lede">
+            There is no transaction spanning services. A saga replaces it with a
+            sequence of local transactions, each with a
+            <strong>compensating action</strong> that undoes it if a later step
+            fails.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="A checkout saga where the shipping step fails and earlier steps are undone by compensating actions in reverse order"
+              >
+                <defs>
+                  <marker
+                    id="m5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    forward — each step is its own local transaction, committed
+                  </text>
+
+                  <rect
+                    x="12"
+                    y="30"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="86"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    1 · create order
+                  </text>
+                  <text
+                    x="86"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    committed ✓
+                  </text>
+                  <g color="var(--val)">
+                    <line
+                      x1="164"
+                      y1="56"
+                      x2="194"
+                      y2="56"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="198"
+                    y="30"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="272"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    2 · charge card
+                  </text>
+                  <text
+                    x="272"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    committed ✓
+                  </text>
+                  <g color="var(--val)">
+                    <line
+                      x1="350"
+                      y1="56"
+                      x2="380"
+                      y2="56"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="384"
+                    y="30"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="458"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    3 · reserve stock
+                  </text>
+                  <text
+                    x="458"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    committed ✓
+                  </text>
+                  <g color="var(--hot)">
+                    <line
+                      x1="536"
+                      y1="56"
+                      x2="566"
+                      y2="56"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="570"
+                    y="30"
+                    width="116"
+                    height="52"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="628"
+                    y="52"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    4 · ship
+                  </text>
+                  <text
+                    x="628"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    FAILS ✗
+                  </text>
+
+                  <text
+                    x="12"
+                    y="124"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    backward — undo what committed, newest first
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="566"
+                      y1="162"
+                      x2="536"
+                      y2="162"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+                  <rect
+                    x="384"
+                    y="136"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="458"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    release stock
+                  </text>
+                  <text
+                    x="458"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    compensate 3
+                  </text>
+                  <g color="var(--key)">
+                    <line
+                      x1="380"
+                      y1="162"
+                      x2="350"
+                      y2="162"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="198"
+                    y="136"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="272"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    refund card
+                  </text>
+                  <text
+                    x="272"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    compensate 2
+                  </text>
+                  <g color="var(--key)">
+                    <line
+                      x1="194"
+                      y1="162"
+                      x2="164"
+                      y2="162"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="12"
+                    y="136"
+                    width="148"
+                    height="52"
+                    rx="7"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="86"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    cancel order
+                  </text>
+                  <text
+                    x="86"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    compensate 1
+                  </text>
+
+                  <text x="12" y="216" font-size="10.5" fill="var(--ink-soft)">
+                    A refund is not an undo — the customer saw the charge.
+                    Compensation is a new business event.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Compensation isn't rollback.</b> Step 2 really happened and
+              other systems may have reacted to it. You can't erase it, only
+              follow it with another action — so each compensation must itself
+              be idempotent and able to fail and retry.
+            </figcaption>
+          </figure>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Choreography</th>
+                  <th>Orchestration</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>How</td>
+                  <td>Each service reacts to events</td>
+                  <td>A coordinator tells each service what to do</td>
+                </tr>
+                <tr>
+                  <td>Central logic</td>
+                  <td>None — it's spread out</td>
+                  <td>In one place</td>
+                </tr>
+                <tr>
+                  <td>Easy to follow?</td>
+                  <td class="n">Hard past 3–4 steps</td>
+                  <td class="y">Yes — read the orchestrator</td>
+                </tr>
+                <tr>
+                  <td>Coupling</td>
+                  <td>Low</td>
+                  <td>Services coupled to the orchestrator</td>
+                </tr>
+                <tr>
+                  <td>Good for</td>
+                  <td>Short, simple flows</td>
+                  <td>Long flows, complex compensation</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Two-phase commit exists and can technically span services, but it
+            blocks every participant while the coordinator decides, and a
+            coordinator failure can leave them locked indefinitely. That's why
+            sagas, not 2PC, are the standard answer. For orchestration, workflow
+            engines such as Temporal or Camunda handle the state machine,
+            retries and timeouts for you.
+          </p>
+        </section>
+
+        <!-- ============ OUTBOX ============ -->
+        <section id="outbox">
+          <h2>The outbox</h2>
+          <p class="lede">
+            Saving to your database and publishing an event are two separate
+            systems. Doing both correctly is harder than it looks — this is the
+            <strong>dual-write problem</strong>.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="The dual-write problem where a crash between database save and event publish loses the event, solved by writing the event to an outbox table in the same transaction"
+              >
+                <defs>
+                  <marker
+                    id="m6"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <text
+                    x="12"
+                    y="18"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    ✗ DUAL WRITE
+                  </text>
+                  <rect
+                    x="12"
+                    y="30"
+                    width="126"
+                    height="44"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="75"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink)"
+                  >
+                    save order
+                  </text>
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="142"
+                      y1="52"
+                      x2="172"
+                      y2="52"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#m6)"
+                    />
+                  </g>
+                  <rect
+                    x="176"
+                    y="30"
+                    width="84"
+                    height="44"
+                    rx="6"
+                    fill="var(--hot)"
+                    stroke="var(--hot)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="218"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--surface)"
+                  >
+                    crash
+                  </text>
+                  <g color="var(--ink-faint)">
+                    <line
+                      x1="264"
+                      y1="52"
+                      x2="294"
+                      y2="52"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-dasharray="5 4"
+                      marker-end="url(#m6)"
+                    />
+                  </g>
+                  <rect
+                    x="298"
+                    y="30"
+                    width="126"
+                    height="44"
+                    rx="6"
+                    fill="none"
+                    stroke="var(--ink-faint)"
+                    stroke-width="2"
+                    stroke-dasharray="6 4"
+                  />
+                  <text
+                    x="361"
+                    y="57"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    fill="var(--ink-faint)"
+                  >
+                    publish event
+                  </text>
+                  <text
+                    x="440"
+                    y="48"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    order exists,
+                  </text>
+                  <text
+                    x="440"
+                    y="64"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    nobody was told
+                  </text>
+
+                  <line
+                    x1="12"
+                    y1="96"
+                    x2="688"
+                    y2="96"
+                    stroke="var(--rule)"
+                    stroke-width="1"
+                  />
+
+                  <text
+                    x="12"
+                    y="122"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    ✓ OUTBOX
+                  </text>
+                  <rect
+                    x="12"
+                    y="134"
+                    width="260"
+                    height="76"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="28"
+                    y="156"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    ONE local transaction:
+                  </text>
+                  <text x="28" y="176" font-size="10.5" fill="var(--val)">
+                    INSERT INTO orders …
+                  </text>
+                  <text x="28" y="196" font-size="10.5" fill="var(--val)">
+                    INSERT INTO outbox …
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="276"
+                      y1="172"
+                      x2="316"
+                      y2="172"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m6)"
+                    />
+                  </g>
+
+                  <rect
+                    x="320"
+                    y="146"
+                    width="160"
+                    height="52"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="400"
+                    y="168"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    relay
+                  </text>
+                  <text
+                    x="400"
+                    y="186"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--key)"
+                  >
+                    polls or CDC
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="484"
+                      y1="172"
+                      x2="524"
+                      y2="172"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m6)"
+                    />
+                  </g>
+
+                  <rect
+                    x="528"
+                    y="146"
+                    width="158"
+                    height="52"
+                    rx="8"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="607"
+                    y="168"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    Kafka
+                  </text>
+                  <text
+                    x="607"
+                    y="186"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--tree)"
+                  >
+                    at-least-once
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Both rows commit or neither does.</b> The relay then publishes
+              from the outbox and marks rows sent. It can publish a row twice if
+              it crashes mid-way, so consumers must be idempotent — but nothing
+              is ever silently lost.
+            </figcaption>
+          </figure>
+
+          <p>
+            Reversing the order doesn't help: publish first and a failed save
+            leaves an event describing an order that doesn't exist. The outbox
+            works because it turns two systems into one — the database — and
+            lets a separate process do the second write reliably. Change data
+            capture tools like Debezium can read the outbox straight from the
+            database's transaction log instead of polling.
+          </p>
+        </section>
+
+        <!-- ============ SCALING ============ -->
+        <section id="scaling">
+          <h2>Scaling</h2>
+          <p class="lede">
+            The system design fundamentals that decide whether any of this
+            survives real traffic.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Technique</th>
+                  <th>What it does</th>
+                  <th>The catch</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Vertical scaling</td>
+                  <td>Bigger machine</td>
+                  <td>A ceiling, and a single point of failure</td>
+                </tr>
+                <tr>
+                  <td class="name">Horizontal scaling</td>
+                  <td>More machines behind a load balancer</td>
+                  <td>Only works if the service is <b>stateless</b></td>
+                </tr>
+                <tr>
+                  <td class="name">Read replicas</td>
+                  <td>Copies of the DB serving reads</td>
+                  <td>Replication lag — reads can be stale</td>
+                </tr>
+                <tr>
+                  <td class="name">Sharding</td>
+                  <td>Split data across databases by key</td>
+                  <td>Cross-shard queries and rebalancing hurt</td>
+                </tr>
+                <tr>
+                  <td class="name">Caching</td>
+                  <td>Keep hot data in memory</td>
+                  <td>Invalidation</td>
+                </tr>
+                <tr>
+                  <td class="name">Async processing</td>
+                  <td>Queue work for later</td>
+                  <td>Eventual consistency</td>
+                </tr>
+                <tr>
+                  <td class="name">CDN</td>
+                  <td>Serve static content from the edge</td>
+                  <td>Purging on change</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Stateless is the precondition</h3>
+          <p>
+            A load balancer can send any request to any instance only if no
+            instance remembers anything between requests. Session data in
+            instance memory breaks that — users get logged out when routed
+            elsewhere. Move state to a shared store (Redis, the database) or
+            into the request itself (a signed token), and instances become
+            interchangeable.
+          </p>
+
+          <h3>Sharding and consistent hashing</h3>
+          <p>
+            Sharding by <code>hash(key) % N</code> works until N changes — then
+            almost every key moves to a different shard.
+            <strong>Consistent hashing</strong> places shards and keys on a ring
+            so adding a shard moves only about <code>1/N</code> of the keys.
+            It's the same insight as <code>HashMap</code>'s resize from
+            <a href="01-inside-java-maps.html">Inside Java Maps</a>, taken
+            across machines. Pick the shard key carefully: a bad one sends all
+            traffic to one hot shard, and changing it later means migrating
+            everything.
+          </p>
+
+          <h3>Rate limiting</h3>
+          <p>
+            Protects a service from being overwhelmed, whether by a buggy client
+            or a traffic spike. The <strong>token bucket</strong> is the usual
+            algorithm: tokens refill at a steady rate up to a cap, each request
+            spends one, and an empty bucket means reject. The cap lets short
+            bursts through while the refill rate enforces the long-run average.
+          </p>
+        </section>
+
+        <!-- ============ CACHING ============ -->
+        <section id="caching">
+          <h2>Caching</h2>
+          <p class="lede">
+            The cheapest performance win in system design, and the source of its
+            most famous hard problem.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="The cache-aside pattern: check the cache, on a miss read the database and populate the cache"
+              >
+                <defs>
+                  <marker
+                    id="m7"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="80"
+                    width="120"
+                    height="56"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="72"
+                    y="113"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    service
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="136"
+                      y1="96"
+                      x2="262"
+                      y2="62"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m7)"
+                    />
+                  </g>
+                  <text
+                    x="150"
+                    y="68"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    1 · check cache
+                  </text>
+
+                  <rect
+                    x="268"
+                    y="30"
+                    width="150"
+                    height="56"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="343"
+                    y="56"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    Redis
+                  </text>
+                  <text
+                    x="343"
+                    y="74"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    ~sub-millisecond
+                  </text>
+
+                  <text
+                    x="436"
+                    y="54"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    hit → return it
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="136"
+                      y1="122"
+                      x2="262"
+                      y2="156"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#m7)"
+                    />
+                  </g>
+                  <text
+                    x="150"
+                    y="160"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    2 · miss → DB
+                  </text>
+
+                  <rect
+                    x="268"
+                    y="132"
+                    width="150"
+                    height="56"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="343"
+                    y="158"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    database
+                  </text>
+                  <text
+                    x="343"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--key)"
+                  >
+                    milliseconds
+                  </text>
+
+                  <g color="var(--val)">
+                    <path
+                      d="M420 160 C470 160, 470 70, 422 64"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 4"
+                      marker-end="url(#m7)"
+                    />
+                  </g>
+                  <text
+                    x="478"
+                    y="116"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    3 · populate
+                  </text>
+                  <text x="478" y="132" font-size="10" fill="var(--val)">
+                    with a TTL
+                  </text>
+
+                  <text x="572" y="96" font-size="10" fill="var(--ink-soft)">
+                    the app, not
+                  </text>
+                  <text x="572" y="112" font-size="10" fill="var(--ink-soft)">
+                    the cache,
+                  </text>
+                  <text x="572" y="128" font-size="10" fill="var(--ink-soft)">
+                    owns loading
+                  </text>
+
+                  <text x="12" y="210" font-size="10.5" fill="var(--ink-soft)">
+                    On write: update the DB, then DELETE the cache key — don't
+                    try to update both.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Delete on write, don't update.</b> Two concurrent writers
+              updating the cache can finish in the wrong order and leave a stale
+              value in place indefinitely. Deleting forces the next read to
+              fetch fresh, which is self-correcting.
+            </figcaption>
+          </figure>
+
+          <div class="note danger">
+            <span class="tag">The thundering herd</span>
+            <p>
+              A popular key expires and a thousand requests miss at once — all
+              of them hit the database simultaneously, which is exactly the load
+              the cache was protecting it from. Defences: jitter the TTLs so
+              keys don't expire together, let only one request rebuild a key
+              while others wait (a lock or "single flight"), or refresh hot keys
+              before they expire.
+            </p>
+          </div>
+
+          <p>
+            Every cache needs a stated answer to "how stale can this be?", and a
+            TTL is that answer made explicit. If nobody on the team can say what
+            the acceptable staleness is for a piece of data, it isn't ready to
+            be cached.
+          </p>
+        </section>
+
+        <!-- ============ OBSERVE ============ -->
+        <section id="observe">
+          <h2>Observability</h2>
+          <p class="lede">
+            In a monolith a stack trace tells you what happened. In
+            microservices the story is scattered across a dozen processes' logs
+            — unless you deliberately stitch it back together.
+          </p>
+
+          <div class="trio">
+            <div>
+              <h5>Logs</h5>
+              <p>
+                What happened, in detail. Structured JSON, one line per event,
+                always carrying a trace id so lines from different services can
+                be joined.
+              </p>
+            </div>
+            <div>
+              <h5>Metrics</h5>
+              <p>
+                How much and how fast, aggregated over time. Cheap to store.
+                Tells you <em>that</em> something's wrong.
+              </p>
+            </div>
+            <div>
+              <h5>Traces</h5>
+              <p>
+                One request's path through every service, with timings per hop.
+                Tells you <em>where</em> it's wrong.
+              </p>
+            </div>
+          </div>
+
+          <p>
+            The glue is <strong>context propagation</strong>: the gateway
+            assigns a trace id, and every service passes it along in a header
+            (the W3C <code>traceparent</code> standard) and logs it.
+            OpenTelemetry is the vendor-neutral standard for all three signals.
+            In Spring Boot 3, Micrometer Tracing wires this up, including
+            propagation across HTTP clients and Kafka.
+          </p>
+
+          <h4>The four golden signals — watch these per service</h4>
+          <ul>
+            <li>
+              <strong>Latency</strong> — at percentiles. The average hides the
+              users having a terrible time; watch p99.
+            </li>
+            <li><strong>Traffic</strong> — requests per second.</li>
+            <li>
+              <strong>Errors</strong> — the rate of failed requests, including
+              slow ones you'd count as failures.
+            </li>
+            <li>
+              <strong>Saturation</strong> — how full the service is: thread
+              pools, connection pools, queue depth. This is the one that
+              predicts the cascade.
+            </li>
+          </ul>
+        </section>
+
+        <!-- ============ DEPLOY ============ -->
+        <section id="deploy">
+          <h2>Deploying</h2>
+          <p class="lede">
+            Independent deployment is the whole reason for microservices. That
+            only holds if every release is safe to ship on its own.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Strategy</th>
+                  <th>How</th>
+                  <th>Rollback</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Rolling</td>
+                  <td>Replace instances a few at a time</td>
+                  <td>Slow — roll forward again</td>
+                </tr>
+                <tr>
+                  <td class="name">Blue-green</td>
+                  <td>Full new copy, switch traffic at once</td>
+                  <td class="y">Instant — switch back</td>
+                </tr>
+                <tr>
+                  <td class="name">Canary</td>
+                  <td>
+                    Send a small slice of traffic to the new version first
+                  </td>
+                  <td class="y">Stop the canary</td>
+                </tr>
+                <tr>
+                  <td class="name">Feature flags</td>
+                  <td>Ship the code dark, turn it on separately</td>
+                  <td class="y">Flip the flag</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note">
+            <span class="tag"
+              >Backward compatibility is what makes independent deploys
+              possible</span
+            >
+            <p>
+              During any rollout, old and new versions run side by side and talk
+              to each other. So every API change and every event schema change
+              must be compatible in both directions for at least one release:
+              add fields, never rename or remove them in the same step. Changing
+              a contract is always two deploys — expand, then contract once
+              nothing uses the old shape.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ INTERVIEW ============ -->
+        <section id="interview">
+          <h2>Designing a system</h2>
+          <p class="lede">
+            A repeatable order of work for any "design X" problem — in an
+            interview or at a whiteboard with your team. The order matters more
+            than any single answer.
+          </p>
+
+          <ol class="path">
+            <li>
+              <b>Clarify requirements</b
+              ><span
+                >Functional: what must it do? Non-functional: scale, latency,
+                availability, consistency. Ask — don't assume a billion
+                users.</span
+              >
+            </li>
+            <li>
+              <b>Estimate</b
+              ><span
+                >Requests per second, read/write ratio, storage per year. Rough
+                orders of magnitude decide the whole shape of the design.</span
+              >
+            </li>
+            <li>
+              <b>Define the API</b
+              ><span
+                >The handful of calls clients make. This pins down what the
+                system actually is.</span
+              >
+            </li>
+            <li>
+              <b>Model the data</b
+              ><span
+                >Entities, access patterns, SQL or NoSQL. Choose the store from
+                how the data is read, not from habit.</span
+              >
+            </li>
+            <li>
+              <b>Draw the high-level design</b
+              ><span
+                >Clients, load balancer, services, stores, caches, queues. Keep
+                it simple enough to explain in two minutes.</span
+              >
+            </li>
+            <li>
+              <b>Deep-dive the hard parts</b
+              ><span
+                >The bottleneck, the consistency boundary, the hot key. This is
+                where the design is really tested.</span
+              >
+            </li>
+            <li>
+              <b>Name the trade-offs and failure modes</b
+              ><span
+                >What breaks first, what happens when a dependency is down, and
+                what you'd change at ten times the scale.</span
+              >
+            </li>
+          </ol>
+
+          <div class="code">
+            <pre><span class="c">// Back-of-envelope, the habit that matters</span>
+<span class="c">// 10M daily active users × 20 requests/day = 200M requests/day</span>
+<span class="c">// 200M / 86,400 s ≈ 2,300 req/s average</span>
+<span class="c">// peak ≈ 2–3× average           ≈ 5,000–7,000 req/s</span>
+<span class="c">// 1KB per write × 20M writes/day ≈ 20GB/day ≈ 7TB/year</span>
+
+<span class="c">// Useful shortcut: a day is ~100,000 seconds (86,400 rounded)</span></pre>
+          </div>
+        </section>
+
+        <!-- ============ NUMBERS ============ -->
+        <section id="numbers">
+          <h2>Numbers to know</h2>
+          <p class="lede">
+            Orders of magnitude, not exact values — they vary by hardware. What
+            matters is the ratio between them, which tells you where time goes.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operation</th>
+                  <th>Roughly</th>
+                  <th>What it means</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Main memory reference</td>
+                  <td class="mono">100 ns</td>
+                  <td>The baseline</td>
+                </tr>
+                <tr>
+                  <td>Read 1 MB sequentially from memory</td>
+                  <td class="mono">~0.25 ms</td>
+                  <td>Memory is fast for bulk</td>
+                </tr>
+                <tr>
+                  <td>Round trip within a datacenter</td>
+                  <td class="mono">~0.5 ms</td>
+                  <td>Every service hop costs this</td>
+                </tr>
+                <tr>
+                  <td>SSD random read</td>
+                  <td class="mono">~0.1 ms</td>
+                  <td>Much faster than spinning disk</td>
+                </tr>
+                <tr>
+                  <td>Disk seek</td>
+                  <td class="mono">~10 ms</td>
+                  <td>Why databases avoid random I/O</td>
+                </tr>
+                <tr>
+                  <td>Round trip across continents</td>
+                  <td class="mono">~150 ms</td>
+                  <td>Why CDNs and regions exist</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Availability</th>
+                  <th>Downtime per year</th>
+                  <th>Per month</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">99%</td>
+                  <td>~3.65 days</td>
+                  <td>~7.3 hours</td>
+                </tr>
+                <tr>
+                  <td class="mono">99.9%</td>
+                  <td>~8.8 hours</td>
+                  <td>~44 minutes</td>
+                </tr>
+                <tr>
+                  <td class="mono">99.99%</td>
+                  <td>~53 minutes</td>
+                  <td>~4.4 minutes</td>
+                </tr>
+                <tr>
+                  <td class="mono">99.999%</td>
+                  <td>~5.3 minutes</td>
+                  <td>~26 seconds</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Each extra nine is ten times harder and usually costs far more than
+            ten times the money. It's also why the
+            <code>0.999⁵</code> calculation from the cascade section matters: a
+            chain of five three-nines services can't be a three-nines system.
+          </p>
+        </section>
+
+        <!-- ============ JAVA ============ -->
+        <section id="java">
+          <h2>The Java stack</h2>
+          <p class="lede">
+            The standard pieces for building microservices on the JVM today.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Concern</th>
+                  <th>Common choice</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Service framework</td>
+                  <td class="name">Spring Boot</td>
+                  <td>Quarkus and Micronaut start faster</td>
+                </tr>
+                <tr>
+                  <td>Gateway</td>
+                  <td class="name">Spring Cloud Gateway</td>
+                  <td>Or a platform gateway / service mesh</td>
+                </tr>
+                <tr>
+                  <td>Resilience</td>
+                  <td class="name">Resilience4j</td>
+                  <td>
+                    Hystrix is in maintenance — don't start new work on it
+                  </td>
+                </tr>
+                <tr>
+                  <td>HTTP client</td>
+                  <td class="name">RestClient / WebClient</td>
+                  <td>Always configure timeouts</td>
+                </tr>
+                <tr>
+                  <td>Messaging</td>
+                  <td class="name">Spring for Apache Kafka</td>
+                  <td>See Inside Kafka</td>
+                </tr>
+                <tr>
+                  <td>Config</td>
+                  <td class="name">Spring Cloud Config</td>
+                  <td>Or ConfigMaps and secrets</td>
+                </tr>
+                <tr>
+                  <td>Tracing</td>
+                  <td class="name">Micrometer + OpenTelemetry</td>
+                  <td>Replaces Spring Cloud Sleuth</td>
+                </tr>
+                <tr>
+                  <td>Workflows / sagas</td>
+                  <td class="name">Temporal, Camunda</td>
+                  <td>For orchestrated sagas</td>
+                </tr>
+                <tr>
+                  <td>Contract testing</td>
+                  <td class="name">Pact, Spring Cloud Contract</td>
+                  <td>Catch breaking API changes before deploy</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Container platforms now handle much of what used to need a library:
+            Kubernetes provides discovery, load balancing and config, and a
+            service mesh such as Istio can add retries, timeouts and mTLS
+            without changing application code. Library and platform overlap, so
+            pick one layer to own each concern — retrying in both is the retry
+            multiplication problem again. The framework itself is covered in
+            <a href="07-inside-spring.html"><strong>Inside Spring</strong></a>
+            and
+            <a href="08-inside-spring-boot.html"
+              ><strong>Inside Spring Boot</strong></a
+            >; virtual threads, which change the thread-exhaustion picture
+            considerably, in
+            <a href="03-inside-java-threads.html"
+              ><strong>Inside Java Threads</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Starting with microservices</h3>
+          <p>
+            You'll draw boundaries before understanding the domain, and moving a
+            boundary later means moving data between databases. Start with a
+            modular monolith with clean internal boundaries, and extract
+            services once a boundary has proven itself.
+          </p>
+
+          <h3>Sharing a database between services</h3>
+          <p>
+            The fastest way to a distributed monolith. It looks like a shortcut
+            and permanently couples the schemas of everything that touches the
+            table.
+          </p>
+
+          <h3>A network call with no timeout</h3>
+          <p>
+            Many clients default to waiting forever. One slow dependency then
+            holds every thread in every caller — the cascade. There is no such
+            thing as a call that doesn't need a timeout.
+          </p>
+
+          <h3>Retrying without backoff, jitter, or idempotency</h3>
+          <p>
+            Instant retries attack a struggling service at its weakest moment,
+            synchronised retries arrive in waves, and retrying a non-idempotent
+            call charges the customer twice. Get all three right or don't retry.
+          </p>
+
+          <h3>Long synchronous call chains</h3>
+          <p>
+            Latency adds up and availability multiplies down with every hop. If
+            a request routinely touches six services in sequence, the design
+            needs events, caching or a reshaped boundary — not a faster network.
+          </p>
+
+          <h3>Writing to the database and publishing separately</h3>
+          <p>
+            Any crash between the two leaves them out of step, silently. Use the
+            outbox.
+          </p>
+
+          <h3>No trace id</h3>
+          <p>
+            Without one, investigating a failed request means grepping a dozen
+            services' logs by timestamp and guessing. Add propagation on day
+            one; retrofitting it is miserable.
+          </p>
+
+          <h3>Breaking a contract in one deploy</h3>
+          <p>
+            Renaming a field breaks every consumer still running the old
+            version, and during a rollout that's guaranteed to include some.
+            Expand first, migrate consumers, contract later.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Microservices trade method calls for network calls, and every
+              technique here exists to handle what that costs. Split along team
+              and business lines, give each service its own data, put a timeout
+              on every call, prefer events to long chains, replace transactions
+              with sagas and the outbox, make every handler idempotent, and
+              trace everything. And if one team can own the whole system, you
+              probably don't need any of it yet.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
