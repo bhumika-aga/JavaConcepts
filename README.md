@@ -1,6 +1,6 @@
 # Java Lectures
 
-Eleven self-contained references on how Java actually works underneath the API —
+Twelve self-contained references on how Java actually works underneath the API —
 the mechanisms, not the syntax. Each one follows the same shape: a lead-in,
 mechanism diagrams, real code, comparison tables, and a closing
 "ways to get hurt" section.
@@ -20,8 +20,9 @@ Open **[`index.html`](index.html)** to browse them, or open any lecture directly
 | 09  | [Inside Trees](09-inside-trees.html)                         | Binary search trees, the four traversals, balance and rotations, red-black rules, `TreeMap` and `TreeSet`, tries and B-trees                         | 14       | 6        |
 | 10  | [Inside Graphs](10-inside-graphs.html)                       | Representations and when each wins, BFS and DFS, cycle detection, Dijkstra and where it breaks, topological sort, Union-Find, minimum spanning trees | 14       | 6        |
 | 11  | [Inside Microservices](11-inside-microservices.html)         | When to split, cascading failure and resilience patterns, sagas and the outbox, CAP, scaling and caching, observability, and a system design method  | 18       | 7        |
+| 12  | [Zero to a Million Users](12-zero-to-a-million-users.html)   | The scaling sequence stage by stage — one box, split DB, load balancer, replicas, cache, CDN, queues, sharding, multi-region, and what breaks next   | 16       | 6        |
 
-148 sections and 66 diagrams in total.
+164 sections and 72 diagrams in total.
 
 ## How they're built
 

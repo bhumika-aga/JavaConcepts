@@ -1,0 +1,2973 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zero to a Million Users</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      img {
+        max-width: 100%;
+      }
+
+      /* ============ TOKENS: complete light palette on bare :root ============ */
+      :root {
+        --bg: #f3f5f1;
+        --surface: #fbfcfa;
+        --surface-2: #e9ede6;
+        --ink: #15191b;
+        --ink-soft: #59635f;
+        --ink-faint: #808a85;
+        --rule: #d6dcd3;
+        --rule-strong: #b9c2b5;
+
+        --key: #a85b00; /* keys, hashes  */
+        --key-bg: #f6e8d5;
+        --val: #0b6e75; /* values        */
+        --val-bg: #d8ecec;
+        --hot: #b33a2b; /* collisions    */
+        --hot-bg: #f7e2de;
+        --tree: #5e4b8b; /* tree nodes    */
+        --tree-bg: #e7e2f2;
+        --good: #2f6b43;
+
+        --code-bg: #1b2124;
+        --code-ink: #dce3de;
+        --code-key: #e5a75b;
+        --code-str: #7fc7a4;
+        --code-com: #6e7c77;
+        --code-type: #6fc3ce;
+        --code-num: #d08fb8;
+
+        --shadow:
+          0 1px 2px rgba(21, 25, 27, 0.05),
+          0 6px 20px -8px rgba(21, 25, 27, 0.12);
+        --measure: 66ch;
+      }
+      /* system-dark (no stamp) — an explicit light choice still wins */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #13181a;
+          --surface: #1a2023;
+          --surface-2: #222a2d;
+          --ink: #e9ece8;
+          --ink-soft: #a3ada8;
+          --ink-faint: #7c8782;
+          --rule: #2b3336;
+          --rule-strong: #3d4749;
+
+          --key: #e5a75b;
+          --key-bg: #3a2c17;
+          --val: #4fc7d2;
+          --val-bg: #123034;
+          --hot: #e87862;
+          --hot-bg: #3b211c;
+          --tree: #ac9bdb;
+          --tree-bg: #2a2440;
+          --good: #6fbf8b;
+
+          --code-bg: #0e1214;
+          --code-ink: #dce3de;
+          --shadow:
+            0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+        }
+      }
+      /* explicit dark choice wins over a light OS */
+      :root[data-theme="dark"] {
+        --bg: #13181a;
+        --surface: #1a2023;
+        --surface-2: #222a2d;
+        --ink: #e9ece8;
+        --ink-soft: #a3ada8;
+        --ink-faint: #7c8782;
+        --rule: #2b3336;
+        --rule-strong: #3d4749;
+
+        --key: #e5a75b;
+        --key-bg: #3a2c17;
+        --val: #4fc7d2;
+        --val-bg: #123034;
+        --hot: #e87862;
+        --hot-bg: #3b211c;
+        --tree: #ac9bdb;
+        --tree-bg: #2a2440;
+        --good: #6fbf8b;
+
+        --code-bg: #0e1214;
+        --code-ink: #dce3de;
+        --shadow:
+          0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 26px -10px rgba(0, 0, 0, 0.6);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Newsreader", Georgia, "Times New Roman", serif;
+        font-optical-sizing: auto;
+        font-size: 19px;
+        line-height: 1.62;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ============ SHELL ============ */
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px 120px;
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr);
+        gap: 56px;
+        align-items: start;
+      }
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+
+      /* ============ SIDEBAR NAV ============ */
+      .rail {
+        position: sticky;
+        top: 0;
+        padding: 40px 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      }
+      .rail-title {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+        margin: 0 0 14px;
+      }
+      .rail a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        border-left: 2px solid var(--rule);
+        color: var(--ink-soft);
+        text-decoration: none;
+        font-size: 13.5px;
+        line-height: 1.35;
+        font-weight: 500;
+      }
+      .rail a:hover {
+        color: var(--ink);
+        border-left-color: var(--key);
+      }
+      .rail a:focus-visible {
+        outline: 2px solid var(--key);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+      .rail .grp {
+        margin-top: 18px;
+        padding-left: 12px;
+        font-size: 10.5px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+      .rail .grp:first-of-type {
+        margin-top: 0;
+      }
+      @media (max-width: 960px) {
+        .rail {
+          position: static;
+          max-height: none;
+          padding: 20px 0 0;
+          border-bottom: 1px solid var(--rule);
+        }
+        .rail-inner {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          padding-bottom: 14px;
+        }
+        .rail .grp {
+          display: none;
+        }
+        .rail a {
+          border-left: none;
+          white-space: nowrap;
+          background: var(--surface-2);
+          border-radius: 999px;
+          padding: 5px 12px;
+          font-size: 12.5px;
+        }
+      }
+
+      /* ============ MASTHEAD ============ */
+      .mast {
+        padding: 64px 0 40px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .eyebrow {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11.5px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      h1 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(40px, 7vw, 74px);
+        line-height: 0.96;
+        letter-spacing: -0.025em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      .dek {
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        max-width: 60ch;
+        margin: 0;
+        font-weight: 400;
+      }
+      .dek em {
+        color: var(--ink);
+        font-style: italic;
+      }
+
+      /* ============ TYPE ============ */
+      main {
+        padding-top: 8px;
+      }
+      section {
+        padding: 52px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+      section:last-of-type {
+        border-bottom: none;
+      }
+      h2 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 800;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        margin: 0 0 10px;
+        text-wrap: balance;
+        scroll-margin-top: 20px;
+      }
+      h3 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 21px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 38px 0 10px;
+        text-wrap: balance;
+      }
+      h4 {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 30px 0 10px;
+      }
+      p {
+        margin: 0 0 18px;
+        max-width: var(--measure);
+      }
+      .lede {
+        font-size: 20.5px;
+        color: var(--ink-soft);
+        max-width: 62ch;
+      }
+      ul,
+      ol {
+        max-width: var(--measure);
+        margin: 0 0 18px;
+        padding-left: 1.25em;
+      }
+      li {
+        margin-bottom: 9px;
+      }
+      li::marker {
+        color: var(--key);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--val);
+      }
+
+      code {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 0.83em;
+        background: var(--surface-2);
+        padding: 0.12em 0.38em;
+        border-radius: 4px;
+        border: 1px solid var(--rule);
+      }
+      .kk {
+        color: var(--key);
+        font-weight: 500;
+      }
+      .vv {
+        color: var(--val);
+        font-weight: 500;
+      }
+
+      /* ============ CODE BLOCKS ============ */
+      .code {
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        padding: 20px 22px;
+        overflow-x: auto;
+        margin: 0 0 20px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13.5px;
+        line-height: 1.72;
+        border: 1px solid var(--rule);
+      }
+      .code pre {
+        margin: 0;
+      }
+      .code .k {
+        color: var(--code-key);
+      }
+      .code .s {
+        color: var(--code-str);
+      }
+      .code .c {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .code .t {
+        color: var(--code-type);
+      }
+      .code .n {
+        color: var(--code-num);
+      }
+      .code-label {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 8px;
+      }
+
+      /* ============ FIGURES ============ */
+      figure {
+        margin: 30px 0 26px;
+        max-width: 100%;
+      }
+      .figbox {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 24px 20px 18px;
+        overflow-x: auto;
+        box-shadow: var(--shadow);
+      }
+      .figbox svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        min-width: 520px;
+      }
+      figcaption {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin-top: 12px;
+        max-width: 60ch;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      /* ============ SPEC STRIP ============ */
+      .spec {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 22px 0 30px;
+      }
+      .spec div {
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+      .spec dt {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        margin: 0 0 5px;
+      }
+      .spec dd {
+        margin: 0;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+        color: var(--ink);
+      }
+      .spec dd.no {
+        color: var(--hot);
+      }
+      .spec dd.yes {
+        color: var(--good);
+      }
+
+      /* ============ CALLOUT ============ */
+      .note {
+        border-left: 3px solid var(--key);
+        background: var(--key-bg);
+        padding: 16px 20px;
+        border-radius: 0 8px 8px 0;
+        margin: 24px 0;
+        max-width: var(--measure);
+      }
+      .note p {
+        margin: 0;
+        font-size: 17.5px;
+        color: var(--ink);
+      }
+      .note p + p {
+        margin-top: 12px;
+      }
+      .note .tag {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 10.5px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--key);
+        font-weight: 700;
+        display: block;
+        margin-bottom: 6px;
+      }
+      .note.danger {
+        border-left-color: var(--hot);
+        background: var(--hot-bg);
+      }
+      .note.danger .tag {
+        color: var(--hot);
+      }
+
+      /* ============ TABLES ============ */
+      .tablewrap {
+        overflow-x: auto;
+        margin: 24px 0 28px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 660px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      th {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--ink-soft);
+        background: var(--surface-2);
+        position: sticky;
+        top: 0;
+      }
+      td {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.mono,
+      th.mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td.name {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .y {
+        color: var(--good);
+        font-weight: 700;
+      }
+      .n {
+        color: var(--hot);
+        font-weight: 700;
+      }
+      .mid {
+        color: var(--key);
+        font-weight: 700;
+      }
+
+      /* ============ DECISION LIST ============ */
+      .pick {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+      }
+      .pick li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: baseline;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .pick li:last-child {
+        border-bottom: none;
+      }
+      .pick .want {
+        font-size: 17px;
+      }
+      .pick .use {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--val);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* ============ TRIO CARDS ============ */
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin: 24px 0 28px;
+      }
+      .trio div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--hot);
+        border-radius: 8px;
+        padding: 15px 17px;
+      }
+      .trio h5 {
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin: 0 0 6px;
+      }
+      .trio p {
+        font-size: 14.5px;
+        margin: 0;
+        color: var(--ink-soft);
+        max-width: none;
+      }
+
+      /* ============ NUMBERED PATH ============ */
+      .path {
+        list-style: none;
+        padding: 0;
+        margin: 22px 0;
+        max-width: var(--measure);
+        counter-reset: step;
+      }
+      .path li {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 14px;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .path li:last-child {
+        border-bottom: none;
+      }
+      .path li::before {
+        counter-increment: step;
+        content: counter(step);
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--key);
+        padding-top: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .path b {
+        display: block;
+        font-family: "Bricolage Grotesque", system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+      .path span {
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+      .path b,
+      .path span {
+        grid-column: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="rail" aria-label="Contents">
+        <div class="rail-inner">
+          <p class="rail-title">Contents</p>
+          <div class="grp">Before you start</div>
+          <a href="#users">What "a million" means</a>
+          <a href="#rule">The only real rule</a>
+          <div class="grp">The stages</div>
+          <a href="#s0">0 · One box</a>
+          <a href="#s1">1 · Split the database</a>
+          <a href="#s2">2 · Load balancer</a>
+          <a href="#s3">3 · Replication</a>
+          <a href="#s4">4 · Cache</a>
+          <a href="#s5">5 · CDN</a>
+          <a href="#s6">6 · Queues</a>
+          <a href="#s7">7 · Sharding</a>
+          <a href="#s8">8 · Multi-region</a>
+          <div class="grp">Around it</div>
+          <a href="#observability">Seeing what's happening</a>
+          <a href="#whole">The whole picture</a>
+          <div class="grp">Reference</div>
+          <a href="#breaks">What breaks next</a>
+          <a href="#estimate">Estimating</a>
+          <a href="#gotchas">Ways to get hurt</a>
+        </div>
+      </nav>
+
+      <main>
+        <header class="mast">
+          <p class="eyebrow">scaling &middot; one server to a million users</p>
+          <h1>Zero to a Million Users</h1>
+          <p class="dek">
+            Nobody designs the million-user architecture on day one — they
+            arrive at it, one bottleneck at a time. This is that sequence:
+            <em>what breaks, in what order, and what you add in response</em>.
+          </p>
+        </header>
+
+        <!-- ============ USERS ============ -->
+        <section id="users">
+          <h2>What "a million" means</h2>
+          <p class="lede">
+            Before anything else: a million <em>users</em> is not a million
+            <em>requests</em>. Conflating the two is how people over-build for
+            traffic that never arrives.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>Means</th>
+                  <th>Typical ratio</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Registered users</td>
+                  <td>Everyone who ever signed up</td>
+                  <td>The vanity number</td>
+                </tr>
+                <tr>
+                  <td class="name">Daily active (DAU)</td>
+                  <td>Who shows up today</td>
+                  <td>Often 10–20% of registered</td>
+                </tr>
+                <tr>
+                  <td class="name">Concurrent users</td>
+                  <td>Active right now</td>
+                  <td>Often 1–10% of DAU</td>
+                </tr>
+                <tr>
+                  <td class="name">Requests per second</td>
+                  <td>What the servers actually feel</td>
+                  <td>The only one that sizes hardware</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="code">
+            <pre><span class="c">// 1,000,000 registered → maybe 200,000 DAU</span>
+<span class="c">// 200,000 DAU × 30 requests each  = 6,000,000 requests/day</span>
+<span class="c">// 6,000,000 / 86,400 s            ≈ 70 requests/second average</span>
+<span class="c">// peak ≈ 2–3× average             ≈ 150–200 requests/second</span></pre>
+          </div>
+
+          <p>
+            Two hundred requests per second is <strong>not</strong> a hard
+            problem. A single well-tuned server can serve that. Most systems
+            described as "at scale" are handling a few hundred requests per
+            second against a few hundred gigabytes of data — and the complexity
+            in them is usually about <em>availability</em> and
+            <em>team size</em>, not raw load.
+          </p>
+        </section>
+
+        <!-- ============ RULE ============ -->
+        <section id="rule">
+          <h2>The only real rule</h2>
+          <p class="lede">
+            Add a stage when you have measured the bottleneck it solves. Not
+            before.
+          </p>
+
+          <p>
+            Every step below costs something permanent: more moving parts, more
+            failure modes, more to operate at 3am. Each one is worth it
+            <em>at the point the previous design stops coping</em> and is dead
+            weight before then. The sequence matters as much as the contents —
+            adding sharding before caching, for instance, is a great deal of
+            work to solve a problem caching would have made disappear.
+          </p>
+
+          <div class="note danger">
+            <span class="tag"
+              >Premature scaling is the more common failure</span
+            >
+            <p>
+              Far more projects die from complexity they didn't need than from
+              traffic they couldn't handle. A single server with a well-indexed
+              database will take a real product further than most engineers
+              expect — and the version of you that has actual traffic will make
+              far better decisions than the version guessing today.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ S0 ============ -->
+        <section id="s0">
+          <h2>Stage 0 · One box</h2>
+          <p class="lede">
+            Web server and database on the same machine. This is the correct
+            architecture for a new product, and it is not embarrassing.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 190"
+                role="img"
+                aria-label="A single server running both the application and the database, serving users directly"
+              >
+                <defs>
+                  <marker
+                    id="z1"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="24"
+                    y="66"
+                    width="104"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="76"
+                    y="97"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    users
+                  </text>
+                  <line
+                    x1="132"
+                    y1="92"
+                    x2="188"
+                    y2="92"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z1)"
+                  />
+
+                  <rect
+                    x="196"
+                    y="36"
+                    width="250"
+                    height="112"
+                    rx="10"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="321"
+                    y="60"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    ONE SERVER
+                  </text>
+                  <rect
+                    x="216"
+                    y="72"
+                    width="100"
+                    height="58"
+                    rx="7"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="266"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app
+                  </text>
+                  <text
+                    x="266"
+                    y="115"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    Spring Boot
+                  </text>
+                  <rect
+                    x="326"
+                    y="72"
+                    width="100"
+                    height="58"
+                    rx="7"
+                    fill="var(--surface)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="376"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    database
+                  </text>
+                  <text
+                    x="376"
+                    y="115"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    Postgres
+                  </text>
+
+                  <text
+                    x="478"
+                    y="66"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--good)"
+                  >
+                    good for a long time
+                  </text>
+                  <text x="478" y="86" font-size="10" fill="var(--ink-soft)">
+                    one deploy, one log file,
+                  </text>
+                  <text x="478" y="102" font-size="10" fill="var(--ink-soft)">
+                    real transactions, no network
+                  </text>
+                  <text
+                    x="478"
+                    y="126"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    breaks when: app and DB
+                  </text>
+                  <text
+                    x="478"
+                    y="142"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    fight for CPU and RAM
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The first thing that fails is contention, not capacity.</b> A
+              slow query pins the CPU and the web server stops responding — two
+              unrelated workloads competing for one set of resources.
+            </figcaption>
+          </figure>
+
+          <p>
+            Before changing the architecture, exhaust the cheap fixes: add the
+            missing index, fix the N+1 query, turn on connection pooling, raise
+            the instance size. <strong>Vertical scaling is underrated</strong> —
+            cloud machines now reach hundreds of cores and terabytes of RAM, and
+            a bigger box requires no new failure modes. It has a ceiling and
+            it's a single point of failure, but it buys time at almost no
+            complexity cost.
+          </p>
+        </section>
+
+        <!-- ============ S1 ============ -->
+        <section id="s1">
+          <h2>Stage 1 · Split the database off</h2>
+          <p class="lede">
+            Move the database to its own machine. The first structural change,
+            and the one with the best ratio of benefit to regret.
+          </p>
+
+          <p>
+            Now each can be sized for what it actually does — the database gets
+            memory and fast disks, the app gets CPU — and they stop stealing
+            resources from one another. It also means the app tier can be
+            replaced or restarted without touching the data, which is the
+            precondition for everything that follows.
+          </p>
+
+          <p>
+            The cost is one network hop on every query, which is why
+            <strong>connection pooling</strong> stops being optional: opening a
+            TCP connection and authenticating per query will dominate your
+            latency. Set the pool size deliberately — a pool far larger than the
+            database's worker count just moves the queue somewhere less visible.
+          </p>
+
+          <div class="note">
+            <span class="tag">Also do this now</span>
+            <p>
+              Take backups and <em>verify a restore</em>. A backup you have
+              never restored is a hypothesis, not a backup. This is the cheapest
+              it will ever be to test, because the dataset is still small.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ S2 ============ -->
+        <section id="s2">
+          <h2>Stage 2 · Load balancer and a second app server</h2>
+          <p class="lede">
+            One app server is a single point of failure and a hard ceiling. Two
+            behind a load balancer fixes both — provided the servers hold no
+            state.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 230"
+                role="img"
+                aria-label="A load balancer distributing traffic across three stateless app servers that share one database and one session store"
+              >
+                <defs>
+                  <marker
+                    id="z2"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="92"
+                    width="84"
+                    height="46"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="54"
+                    y="120"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    users
+                  </text>
+                  <line
+                    x1="100"
+                    y1="115"
+                    x2="132"
+                    y2="115"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+
+                  <rect
+                    x="136"
+                    y="84"
+                    width="96"
+                    height="62"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="184"
+                    y="110"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    load
+                  </text>
+                  <text
+                    x="184"
+                    y="126"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    balancer
+                  </text>
+
+                  <line
+                    x1="236"
+                    y1="100"
+                    x2="286"
+                    y2="60"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+                  <line
+                    x1="236"
+                    y1="115"
+                    x2="286"
+                    y2="115"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+                  <line
+                    x1="236"
+                    y1="130"
+                    x2="286"
+                    y2="170"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+
+                  <rect
+                    x="290"
+                    y="36"
+                    width="116"
+                    height="46"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="348"
+                    y="64"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app 1
+                  </text>
+                  <rect
+                    x="290"
+                    y="92"
+                    width="116"
+                    height="46"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="348"
+                    y="120"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app 2
+                  </text>
+                  <rect
+                    x="290"
+                    y="148"
+                    width="116"
+                    height="46"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="348"
+                    y="176"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app 3
+                  </text>
+                  <text
+                    x="348"
+                    y="212"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--ink-soft)"
+                  >
+                    all identical · hold no state
+                  </text>
+
+                  <line
+                    x1="410"
+                    y1="60"
+                    x2="452"
+                    y2="96"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+                  <line
+                    x1="410"
+                    y1="115"
+                    x2="452"
+                    y2="115"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+                  <line
+                    x1="410"
+                    y1="170"
+                    x2="452"
+                    y2="134"
+                    stroke="var(--ink-soft)"
+                    stroke-width="2"
+                    marker-end="url(#z2)"
+                  />
+
+                  <rect
+                    x="456"
+                    y="92"
+                    width="112"
+                    height="46"
+                    rx="7"
+                    fill="var(--surface-2)"
+                    stroke="var(--ink)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="512"
+                    y="120"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    database
+                  </text>
+
+                  <rect
+                    x="456"
+                    y="24"
+                    width="112"
+                    height="46"
+                    rx="7"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="512"
+                    y="44"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    session store
+                  </text>
+                  <text
+                    x="512"
+                    y="60"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--tree)"
+                  >
+                    Redis
+                  </text>
+
+                  <text x="586" y="44" font-size="10" fill="var(--tree)">
+                    state lives
+                  </text>
+                  <text x="586" y="60" font-size="10" fill="var(--tree)">
+                    here, not in
+                  </text>
+                  <text x="586" y="76" font-size="10" fill="var(--tree)">
+                    the app
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Statelessness is the whole trick.</b> If any request can go to
+              any server, you scale by adding servers and survive by losing one.
+              If a server remembers something, neither works.
+            </figcaption>
+          </figure>
+
+          <p>
+            Session data in an app server's memory is the usual violator: a user
+            logs in on app 1, their next request lands on app 2, and they're
+            logged out. Three ways out, in increasing order of preference:
+          </p>
+
+          <ul>
+            <li>
+              <strong>Sticky sessions</strong> — the balancer pins a user to one
+              server. Works, but wrecks even distribution and loses the session
+              when that server dies. A stopgap.
+            </li>
+            <li>
+              <strong>Shared session store</strong> — sessions in Redis. Servers
+              stay interchangeable, at the cost of one network read per request.
+            </li>
+            <li>
+              <strong>Tokens</strong> — put signed claims in a JWT or cookie, so
+              there's no server-side session at all. The cleanest, with the
+              caveat that revoking a token before it expires needs its own
+              mechanism.
+            </li>
+          </ul>
+
+          <p>
+            The load balancer also becomes your health-check enforcement point:
+            an instance that fails its check stops receiving traffic
+            automatically, which turns most single-instance failures into a
+            non-event.
+          </p>
+        </section>
+
+        <!-- ============ S3 ============ -->
+        <section id="s3">
+          <h2>Stage 3 · Database replication</h2>
+          <p class="lede">
+            Most applications read far more than they write. Replicas let reads
+            scale sideways — and introduce the first place where your data can
+            be <em>visibly</em> out of date.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 220"
+                role="img"
+                aria-label="Writes going to a primary database which replicates asynchronously to read replicas, with lag causing a stale read"
+              >
+                <defs>
+                  <marker
+                    id="z3"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="44"
+                    width="104"
+                    height="44"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="64"
+                    y="71"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    writes
+                  </text>
+                  <g color="var(--hot)">
+                    <line
+                      x1="120"
+                      y1="66"
+                      x2="164"
+                      y2="66"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#z3)"
+                    />
+                  </g>
+
+                  <rect
+                    x="168"
+                    y="38"
+                    width="130"
+                    height="56"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="233"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="11"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    PRIMARY
+                  </text>
+                  <text
+                    x="233"
+                    y="80"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--key)"
+                  >
+                    the only writer
+                  </text>
+
+                  <g color="var(--val)">
+                    <line
+                      x1="302"
+                      y1="54"
+                      x2="352"
+                      y2="34"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 4"
+                      marker-end="url(#z3)"
+                    />
+                    <line
+                      x1="302"
+                      y1="70"
+                      x2="352"
+                      y2="96"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 4"
+                      marker-end="url(#z3)"
+                    />
+                    <line
+                      x1="302"
+                      y1="84"
+                      x2="352"
+                      y2="158"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-dasharray="6 4"
+                      marker-end="url(#z3)"
+                    />
+                  </g>
+                  <text x="312" y="118" font-size="9.5" fill="var(--val)">
+                    async
+                  </text>
+
+                  <rect
+                    x="356"
+                    y="14"
+                    width="126"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="419"
+                    y="39"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    replica 1
+                  </text>
+                  <rect
+                    x="356"
+                    y="76"
+                    width="126"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="419"
+                    y="101"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    replica 2
+                  </text>
+                  <rect
+                    x="356"
+                    y="138"
+                    width="126"
+                    height="40"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="419"
+                    y="163"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    replica 3
+                  </text>
+                  <text
+                    x="419"
+                    y="198"
+                    text-anchor="middle"
+                    font-size="10"
+                    fill="var(--val)"
+                  >
+                    reads spread across these
+                  </text>
+
+                  <rect
+                    x="502"
+                    y="40"
+                    width="184"
+                    height="86"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="594"
+                    y="62"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    replication lag
+                  </text>
+                  <text x="518" y="82" font-size="9.5" fill="var(--hot)">
+                    user saves their profile,
+                  </text>
+                  <text x="518" y="98" font-size="9.5" fill="var(--hot)">
+                    reloads, sees the OLD
+                  </text>
+                  <text x="518" y="114" font-size="9.5" fill="var(--hot)">
+                    version — nothing is broken
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>Read-after-write is the bug you'll actually hit.</b> The fix is
+              routing: for a short window after a user writes, send
+              <em>that user's</em> reads to the primary. Everyone else keeps
+              using replicas.
+            </figcaption>
+          </figure>
+
+          <p>
+            Replication also gives you failover — promote a replica when the
+            primary dies — and a place to run expensive analytical queries
+            without touching the machine serving customers. What it does
+            <strong>not</strong> give you is write scaling: every write still
+            goes through one primary. That ceiling is what eventually forces
+            sharding.
+          </p>
+        </section>
+
+        <!-- ============ S4 ============ -->
+        <section id="s4">
+          <h2>Stage 4 · Cache</h2>
+          <p class="lede">
+            The highest-leverage change on this list. A cache in front of the
+            database routinely removes 80–95% of read traffic for the cost of
+            one Redis instance.
+          </p>
+
+          <p>
+            The pattern is <strong>cache-aside</strong>: look in the cache, and
+            on a miss read the database and store the result with a TTL. On a
+            write, update the database and <em>delete</em> the key rather than
+            updating it — two concurrent writers updating a cache can finish out
+            of order and leave a stale value there permanently, whereas a delete
+            forces the next read to fetch fresh.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Good cache candidate</th>
+                  <th>Poor candidate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Read often, written rarely</td>
+                  <td>Written as often as read</td>
+                </tr>
+                <tr>
+                  <td>Expensive to compute</td>
+                  <td>A trivial indexed lookup</td>
+                </tr>
+                <tr>
+                  <td>Tolerates being seconds stale</td>
+                  <td>Must be exact — balances, stock counts</td>
+                </tr>
+                <tr>
+                  <td>Shared across many users</td>
+                  <td>Unique per user and used once</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="note danger">
+            <span class="tag">Caching is where correctness bugs come from</span>
+            <p>
+              Every cached value is a copy that can disagree with the truth.
+              Before caching anything, answer "how stale may this be?" — and if
+              nobody can answer, it isn't ready to cache. Watch for the
+              <strong>thundering herd</strong> too: a hot key expiring sends
+              every concurrent request to the database at once. Jitter your TTLs
+              so keys don't expire in lockstep.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ S5 ============ -->
+        <section id="s5">
+          <h2>Stage 5 · CDN and static content</h2>
+          <p class="lede">
+            Images, scripts, stylesheets and video are usually most of your
+            bytes and none of your logic. Serving them from your app servers is
+            waste.
+          </p>
+
+          <p>
+            A CDN copies static files to edge locations near users, so a request
+            from Singapore is answered from Singapore rather than crossing an
+            ocean twice. That removes both the bandwidth and the round-trip —
+            and a cross-continent round trip is on the order of 150ms, which no
+            amount of backend tuning recovers.
+          </p>
+
+          <p>
+            The operational cost is <strong>invalidation</strong>. A file cached
+            at the edge with a long TTL stays cached even after you deploy a new
+            version. The standard answer is content hashing in the filename —
+            <code>app.9f2c1b.js</code> — so a new build produces a new URL and
+            the old one simply stops being requested. Never cache HTML the way
+            you cache assets; the HTML is what points at the hashed filenames.
+          </p>
+        </section>
+
+        <!-- ============ S6 ============ -->
+        <section id="s6">
+          <h2>Stage 6 · Queues and workers</h2>
+          <p class="lede">
+            Some work doesn't need to finish before the user gets a response.
+            Moving it off the request path shortens latency and stops slow jobs
+            from consuming web threads.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 210"
+                role="img"
+                aria-label="A web server enqueuing slow work and responding immediately, while separate workers consume the queue and scale independently"
+              >
+                <defs>
+                  <marker
+                    id="z4"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="66"
+                    width="118"
+                    height="54"
+                    rx="8"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="71"
+                    y="90"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    web server
+                  </text>
+                  <text
+                    x="71"
+                    y="107"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    replies at once
+                  </text>
+
+                  <g color="var(--key)">
+                    <line
+                      x1="134"
+                      y1="92"
+                      x2="182"
+                      y2="92"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#z4)"
+                    />
+                  </g>
+                  <text
+                    x="158"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="9"
+                    fill="var(--key)"
+                  >
+                    enqueue
+                  </text>
+
+                  <rect
+                    x="186"
+                    y="60"
+                    width="176"
+                    height="66"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="274"
+                    y="82"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    queue
+                  </text>
+                  <rect
+                    x="202"
+                    y="92"
+                    width="40"
+                    height="20"
+                    rx="3"
+                    fill="var(--surface)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="248"
+                    y="92"
+                    width="40"
+                    height="20"
+                    rx="3"
+                    fill="var(--surface)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+                  <rect
+                    x="294"
+                    y="92"
+                    width="40"
+                    height="20"
+                    rx="3"
+                    fill="var(--surface)"
+                    stroke="var(--key)"
+                    stroke-width="1.5"
+                  />
+
+                  <g color="var(--tree)">
+                    <line
+                      x1="366"
+                      y1="76"
+                      x2="410"
+                      y2="46"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#z4)"
+                    />
+                    <line
+                      x1="366"
+                      y1="92"
+                      x2="410"
+                      y2="100"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#z4)"
+                    />
+                    <line
+                      x1="366"
+                      y1="110"
+                      x2="410"
+                      y2="154"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      marker-end="url(#z4)"
+                    />
+                  </g>
+
+                  <rect
+                    x="414"
+                    y="24"
+                    width="120"
+                    height="42"
+                    rx="7"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="50"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    worker 1
+                  </text>
+                  <rect
+                    x="414"
+                    y="80"
+                    width="120"
+                    height="42"
+                    rx="7"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="106"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    worker 2
+                  </text>
+                  <rect
+                    x="414"
+                    y="136"
+                    width="120"
+                    height="42"
+                    rx="7"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="474"
+                    y="162"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    worker 3
+                  </text>
+
+                  <text
+                    x="552"
+                    y="56"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    scale workers
+                  </text>
+                  <text
+                    x="552"
+                    y="72"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    independently
+                  </text>
+                  <text x="552" y="96" font-size="10" fill="var(--ink-soft)">
+                    queue depth is
+                  </text>
+                  <text x="552" y="112" font-size="10" fill="var(--ink-soft)">
+                    your autoscale
+                  </text>
+                  <text x="552" y="128" font-size="10" fill="var(--ink-soft)">
+                    signal
+                  </text>
+
+                  <text x="12" y="196" font-size="10" fill="var(--ink-soft)">
+                    Good candidates: emails, thumbnails, exports, indexing,
+                    webhooks, report generation.
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b
+                >A queue converts a latency problem into a throughput
+                problem.</b
+              >
+              The user stops waiting, and a backlog becomes something you can
+              watch and add workers to, rather than an outage.
+            </figcaption>
+          </figure>
+
+          <p>
+            Queue depth is the metric to alarm on: rising depth means consumers
+            aren't keeping up, and it tells you well before users notice. The
+            trade is that work is now <em>eventually</em> done, so the interface
+            has to reflect that — "we'll email you when the export is ready"
+            rather than a spinner. Messaging in depth is in
+            <a href="06-inside-kafka.html"><strong>Inside Kafka</strong></a
+            >.
+          </p>
+        </section>
+
+        <!-- ============ S7 ============ -->
+        <section id="s7">
+          <h2>Stage 7 · Sharding the database</h2>
+          <p class="lede">
+            The last resort, and the one that's genuinely hard to undo. You
+            reach it when a single primary can no longer absorb the writes, or
+            the data no longer fits one machine.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 240"
+                role="img"
+                aria-label="Rows routed to one of four shards by a hash of the shard key, with one shard overloaded by a disproportionately active user"
+              >
+                <defs>
+                  <marker
+                    id="z5"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6.5"
+                    markerHeight="6.5"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="11">
+                  <rect
+                    x="12"
+                    y="76"
+                    width="128"
+                    height="52"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="76"
+                    y="98"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    hash(user_id)
+                  </text>
+                  <text
+                    x="76"
+                    y="116"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--ink-soft)"
+                  >
+                    the shard key
+                  </text>
+
+                  <g color="var(--ink-soft)">
+                    <line
+                      x1="144"
+                      y1="88"
+                      x2="188"
+                      y2="46"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#z5)"
+                    />
+                    <line
+                      x1="144"
+                      y1="98"
+                      x2="188"
+                      y2="96"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#z5)"
+                    />
+                    <line
+                      x1="144"
+                      y1="110"
+                      x2="188"
+                      y2="146"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#z5)"
+                    />
+                    <line
+                      x1="144"
+                      y1="120"
+                      x2="188"
+                      y2="196"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      marker-end="url(#z5)"
+                    />
+                  </g>
+
+                  <rect
+                    x="192"
+                    y="24"
+                    width="130"
+                    height="44"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="257"
+                    y="51"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    shard 0
+                  </text>
+                  <rect
+                    x="192"
+                    y="76"
+                    width="130"
+                    height="44"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="257"
+                    y="103"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    shard 1
+                  </text>
+                  <rect
+                    x="192"
+                    y="128"
+                    width="130"
+                    height="44"
+                    rx="7"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="3"
+                  />
+                  <text
+                    x="257"
+                    y="150"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    shard 2
+                  </text>
+                  <text
+                    x="257"
+                    y="166"
+                    text-anchor="middle"
+                    font-size="9"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    on fire
+                  </text>
+                  <rect
+                    x="192"
+                    y="180"
+                    width="130"
+                    height="44"
+                    rx="7"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="257"
+                    y="207"
+                    text-anchor="middle"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    shard 3
+                  </text>
+
+                  <rect
+                    x="348"
+                    y="24"
+                    width="338"
+                    height="64"
+                    rx="8"
+                    fill="var(--hot-bg)"
+                    stroke="var(--hot)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="364"
+                    y="46"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--hot)"
+                  >
+                    the celebrity problem
+                  </text>
+                  <text x="364" y="64" font-size="9.5" fill="var(--hot)">
+                    one account with 10M followers lands on
+                  </text>
+                  <text x="364" y="79" font-size="9.5" fill="var(--hot)">
+                    one shard and overwhelms it
+                  </text>
+
+                  <rect
+                    x="348"
+                    y="98"
+                    width="338"
+                    height="60"
+                    rx="8"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2.5"
+                  />
+                  <text
+                    x="364"
+                    y="120"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    joins stop working
+                  </text>
+                  <text x="364" y="138" font-size="9.5" fill="var(--key)">
+                    data on different machines can't be joined
+                  </text>
+                  <text x="364" y="152" font-size="9.5" fill="var(--key)">
+                    by the database — you join in the app
+                  </text>
+
+                  <rect
+                    x="348"
+                    y="168"
+                    width="338"
+                    height="56"
+                    rx="8"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="364"
+                    y="190"
+                    font-size="10.5"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    resharding is a migration
+                  </text>
+                  <text x="364" y="208" font-size="9.5" fill="var(--ink-soft)">
+                    consistent hashing limits how much moves
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>The shard key is the decision.</b> It determines which queries
+              stay fast, which become cross-shard scatter-gathers, and where the
+              hotspots land — and changing it later means moving every row.
+            </figcaption>
+          </figure>
+
+          <p>
+            Before sharding, make sure you've genuinely exhausted the
+            alternatives: a bigger primary, moving cold data to archive tables,
+            moving high-volume non-relational data (logs, events, sessions) out
+            to a store built for it, and caching harder. Each of those is
+            reversible. Sharding is not.
+          </p>
+
+          <p>
+            Pick the key from your access patterns: shard by the thing that
+            appears in the <code>WHERE</code> clause of your hottest queries, so
+            a typical request touches exactly one shard. Hash-based keys
+            distribute evenly but destroy range queries; range-based keys keep
+            ranges fast but create hotspots as data grows. The same power-of-two
+            rehashing idea from
+            <a href="01-inside-java-maps.html"
+              ><strong>Inside Java Maps</strong></a
+            >
+            scales up here as consistent hashing.
+          </p>
+        </section>
+
+        <!-- ============ S8 ============ -->
+        <section id="s8">
+          <h2>Stage 8 · Multiple regions</h2>
+          <p class="lede">
+            Two reasons to go multi-region, and they demand different designs:
+            getting closer to users, and surviving the loss of a whole
+            datacentre.
+          </p>
+
+          <p>
+            Routing is the easy half — geo-aware DNS or anycast sends each user
+            to the nearest healthy region. The hard half is data. Replicating a
+            database across regions means accepting either write latency
+            measured in hundreds of milliseconds (synchronous) or genuine
+            divergence between regions (asynchronous). There is no third option;
+            this is the CAP trade from
+            <a href="11-inside-microservices.html"
+              ><strong>Inside Microservices</strong></a
+            >
+            arriving in physical form.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pattern</th>
+                  <th>Writes</th>
+                  <th>Failover</th>
+                  <th>Complexity</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">Active-passive</td>
+                  <td>One region only</td>
+                  <td>Promote the standby</td>
+                  <td class="y">Lowest</td>
+                </tr>
+                <tr>
+                  <td class="name">Active-active, partitioned</td>
+                  <td>Each region owns some users</td>
+                  <td>Reroute that slice</td>
+                  <td class="mid">Moderate</td>
+                </tr>
+                <tr>
+                  <td class="name">Active-active, shared</td>
+                  <td>Anywhere</td>
+                  <td>Transparent</td>
+                  <td class="n">Conflict resolution</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            Most teams that think they need active-active need active-passive
+            with a tested failover. The honest question is your RPO and RTO —
+            how much data may be lost, and how long may recovery take — because
+            the answer sets the architecture and the bill.
+          </p>
+        </section>
+
+        <!-- ============ OBSERVABILITY ============ -->
+        <section id="observability">
+          <h2>Seeing what's happening</h2>
+          <p class="lede">
+            This isn't a stage — it's the thing that tells you which stage
+            you're in. Add it at stage 1, before you need it.
+          </p>
+
+          <p>
+            Every decision on this page depends on measurement. Without it
+            you'll add a cache where the bottleneck was a missing index, or
+            shard a database that was waiting on a lock. The minimum useful set:
+            request rate, error rate, and latency at p50/p95/p99 per endpoint;
+            database query time and slow-query log; cache hit rate; queue depth;
+            and saturation of every pool (threads, connections).
+          </p>
+
+          <div class="note">
+            <span class="tag">Percentiles, not averages</span>
+            <p>
+              An average response time of 200ms can hide 5% of users waiting
+              four seconds. The average is the number that looks fine while
+              people churn. Alarm on p99 and you're watching the experience of
+              the users having the worst time — which is where the truth lives.
+            </p>
+          </div>
+        </section>
+
+        <!-- ============ WHOLE ============ -->
+        <section id="whole">
+          <h2>The whole picture</h2>
+          <p class="lede">
+            Everything assembled. Worth seeing once — and worth remembering that
+            nobody built it in this shape from the start.
+          </p>
+
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 700 260"
+                role="img"
+                aria-label="The assembled architecture: CDN and load balancer in front of stateless app servers, with cache, sharded primaries with replicas, and a queue feeding workers"
+              >
+                <defs>
+                  <marker
+                    id="z6"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto"
+                  >
+                    <path d="M0 0 L10 5 L0 10 z" fill="var(--ink-soft)" />
+                  </marker>
+                </defs>
+                <g font-family="JetBrains Mono, monospace" font-size="10">
+                  <rect
+                    x="10"
+                    y="108"
+                    width="70"
+                    height="40"
+                    rx="6"
+                    fill="var(--surface-2)"
+                    stroke="var(--rule-strong)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="45"
+                    y="132"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    users
+                  </text>
+
+                  <rect
+                    x="10"
+                    y="40"
+                    width="70"
+                    height="40"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="45"
+                    y="64"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    CDN
+                  </text>
+                  <line
+                    x1="45"
+                    y1="104"
+                    x2="45"
+                    y2="84"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+
+                  <line
+                    x1="84"
+                    y1="128"
+                    x2="108"
+                    y2="128"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="112"
+                    y="106"
+                    width="68"
+                    height="44"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="146"
+                    y="132"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    LB
+                  </text>
+
+                  <line
+                    x1="184"
+                    y1="118"
+                    x2="208"
+                    y2="98"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <line
+                    x1="184"
+                    y1="138"
+                    x2="208"
+                    y2="158"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="212"
+                    y="76"
+                    width="92"
+                    height="40"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="258"
+                    y="100"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app
+                  </text>
+                  <rect
+                    x="212"
+                    y="140"
+                    width="92"
+                    height="40"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="258"
+                    y="164"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--val)"
+                  >
+                    app
+                  </text>
+
+                  <line
+                    x1="308"
+                    y1="88"
+                    x2="332"
+                    y2="70"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="336"
+                    y="46"
+                    width="88"
+                    height="40"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="380"
+                    y="70"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    cache
+                  </text>
+
+                  <line
+                    x1="308"
+                    y1="104"
+                    x2="332"
+                    y2="116"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="336"
+                    y="98"
+                    width="88"
+                    height="40"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="380"
+                    y="122"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    shard 0
+                  </text>
+                  <rect
+                    x="336"
+                    y="150"
+                    width="88"
+                    height="40"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="380"
+                    y="174"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    shard 1
+                  </text>
+
+                  <line
+                    x1="428"
+                    y1="112"
+                    x2="452"
+                    y2="104"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <line
+                    x1="428"
+                    y1="168"
+                    x2="452"
+                    y2="176"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="456"
+                    y="84"
+                    width="86"
+                    height="36"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="499"
+                    y="106"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    replicas
+                  </text>
+                  <rect
+                    x="456"
+                    y="158"
+                    width="86"
+                    height="36"
+                    rx="6"
+                    fill="var(--val-bg)"
+                    stroke="var(--val)"
+                    stroke-width="1.8"
+                  />
+                  <text
+                    x="499"
+                    y="180"
+                    text-anchor="middle"
+                    font-size="9.5"
+                    fill="var(--val)"
+                  >
+                    replicas
+                  </text>
+
+                  <line
+                    x1="258"
+                    y1="184"
+                    x2="258"
+                    y2="208"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="196"
+                    y="212"
+                    width="124"
+                    height="36"
+                    rx="6"
+                    fill="var(--key-bg)"
+                    stroke="var(--key)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="258"
+                    y="234"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--key)"
+                  >
+                    queue
+                  </text>
+                  <line
+                    x1="324"
+                    y1="230"
+                    x2="348"
+                    y2="230"
+                    stroke="var(--ink-soft)"
+                    stroke-width="1.8"
+                    marker-end="url(#z6)"
+                  />
+                  <rect
+                    x="352"
+                    y="212"
+                    width="124"
+                    height="36"
+                    rx="6"
+                    fill="var(--tree-bg)"
+                    stroke="var(--tree)"
+                    stroke-width="2"
+                  />
+                  <text
+                    x="414"
+                    y="234"
+                    text-anchor="middle"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--tree)"
+                  >
+                    workers
+                  </text>
+
+                  <text
+                    x="560"
+                    y="40"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    every box here
+                  </text>
+                  <text
+                    x="560"
+                    y="56"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    was added to fix
+                  </text>
+                  <text
+                    x="560"
+                    y="72"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    a measured
+                  </text>
+                  <text
+                    x="560"
+                    y="88"
+                    font-size="10"
+                    font-weight="700"
+                    fill="var(--ink)"
+                  >
+                    bottleneck
+                  </text>
+                  <text x="560" y="116" font-size="9.5" fill="var(--ink-soft)">
+                    start here and you
+                  </text>
+                  <text x="560" y="132" font-size="9.5" fill="var(--ink-soft)">
+                    will spend a year
+                  </text>
+                  <text x="560" y="148" font-size="9.5" fill="var(--ink-soft)">
+                    operating an empty
+                  </text>
+                  <text x="560" y="164" font-size="9.5" fill="var(--ink-soft)">
+                    system
+                  </text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              <b>This is a destination, not a starting point.</b> Read left to
+              right it looks like a design; read chronologically it's eight
+              separate decisions, each made when something measurable broke.
+            </figcaption>
+          </figure>
+        </section>
+
+        <!-- ============ BREAKS ============ -->
+        <section id="breaks">
+          <h2>What breaks next</h2>
+          <p class="lede">
+            A diagnostic table. Find the symptom, and it points at the stage
+            you're missing.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symptom</th>
+                  <th>Usually means</th>
+                  <th>Reach for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Slow pages, database CPU pinned</td>
+                  <td>Missing index or N+1 query</td>
+                  <td>Fix the query first</td>
+                </tr>
+                <tr>
+                  <td>App and DB starving each other</td>
+                  <td>Sharing one machine</td>
+                  <td>Stage 1 — split them</td>
+                </tr>
+                <tr>
+                  <td>Deploy = downtime</td>
+                  <td>One app server</td>
+                  <td>Stage 2 — LB + second server</td>
+                </tr>
+                <tr>
+                  <td>Users randomly logged out</td>
+                  <td>Sessions in app memory</td>
+                  <td>Stage 2 — shared session store</td>
+                </tr>
+                <tr>
+                  <td>Reads saturate the database</td>
+                  <td>Read-heavy workload</td>
+                  <td>Stage 3 — replicas</td>
+                </tr>
+                <tr>
+                  <td>Same query runs constantly</td>
+                  <td>No caching</td>
+                  <td>Stage 4 — cache-aside</td>
+                </tr>
+                <tr>
+                  <td>High bandwidth bill, slow assets abroad</td>
+                  <td>Serving statics yourself</td>
+                  <td>Stage 5 — CDN</td>
+                </tr>
+                <tr>
+                  <td>Requests block on email or PDF work</td>
+                  <td>Slow work on the request path</td>
+                  <td>Stage 6 — queue</td>
+                </tr>
+                <tr>
+                  <td>Writes saturate the primary</td>
+                  <td>One write node</td>
+                  <td>Stage 7 — shard</td>
+                </tr>
+                <tr>
+                  <td>Users abroad see high latency</td>
+                  <td>One region</td>
+                  <td>Stage 8 — multi-region</td>
+                </tr>
+                <tr>
+                  <td>Nobody can say what's slow</td>
+                  <td>No instrumentation</td>
+                  <td>Observability — do this first</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ ESTIMATE ============ -->
+        <section id="estimate">
+          <h2>Estimating</h2>
+          <p class="lede">
+            Rough arithmetic that tells you which stage you actually need.
+            Orders of magnitude are the point — precision isn't.
+          </p>
+
+          <div class="code">
+            <pre><span class="c">// Handy approximations</span>
+<span class="c">//   a day            ≈ 100,000 seconds   (86,400, rounded)</span>
+<span class="c">//   peak traffic     ≈ 2–3× the average</span>
+<span class="c">//   1 million × 1KB  ≈ 1 GB</span>
+
+<span class="c">// Worked: a photo-sharing app</span>
+<span class="c">//   500K DAU, 2 uploads each        = 1M uploads/day ≈ 12 uploads/s</span>
+<span class="c">//   reads are 100× writes           ≈ 1,200 reads/s</span>
+<span class="c">//   2MB per photo × 1M              = 2 TB/day of new storage</span>
+<span class="c">//   → reads: trivially cacheable, mostly CDN</span>
+<span class="c">//   → storage: the actual problem — object storage, not the database</span></pre>
+          </div>
+
+          <p>
+            That last line is the value of estimating. The instinct says "1,200
+            reads per second needs sharding"; the arithmetic says the reads are
+            cacheable and the real constraint is 2TB a day of blobs, which
+            belongs in object storage with a CDN in front. Ten minutes of
+            arithmetic redirects months of work.
+          </p>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scale</th>
+                  <th>Typically needs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">&lt; 100 req/s</td>
+                  <td>One or two app servers, one database</td>
+                </tr>
+                <tr>
+                  <td class="mono">~1,000 req/s</td>
+                  <td>Load balancer, replicas, cache, CDN</td>
+                </tr>
+                <tr>
+                  <td class="mono">~10,000 req/s</td>
+                  <td>Plus queues, heavy caching, maybe sharding</td>
+                </tr>
+                <tr>
+                  <td class="mono">100,000+ req/s</td>
+                  <td>Sharding, multi-region, purpose-built stores</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ============ GOTCHAS ============ -->
+        <section id="gotchas">
+          <h2>Ways to get hurt</h2>
+
+          <h3>Scaling before measuring</h3>
+          <p>
+            The most expensive mistake here. Adding a cache when the problem was
+            a missing index leaves you with both the original slowness and a new
+            consistency bug to maintain. Profile first, every time.
+          </p>
+
+          <h3>Skipping vertical scaling</h3>
+          <p>
+            Doubling the instance size takes ten minutes and adds no failure
+            modes. Distributing a system takes months and adds many. Use the
+            boring option until it genuinely runs out.
+          </p>
+
+          <h3>Keeping state on app servers</h3>
+          <p>
+            Sessions, uploaded files, in-process caches, scheduled jobs that
+            assume they're the only instance. Each one quietly prevents
+            horizontal scaling, and each surfaces as a bizarre intermittent bug
+            the moment you add the second server.
+          </p>
+
+          <h3>Caching without an invalidation story</h3>
+          <p>
+            Easy to add, hard to reason about. If you can't state how stale a
+            value may be and what evicts it, you've introduced a correctness bug
+            that'll surface as "the site shows the wrong price".
+          </p>
+
+          <h3>Sharding too early, or on the wrong key</h3>
+          <p>
+            Sharding is the hardest step to reverse. A poorly chosen shard key
+            means either hotspots or cross-shard queries for everything, and
+            fixing it means migrating every row. Exhaust the reversible options
+            first.
+          </p>
+
+          <h3>Forgetting the database is still one machine</h3>
+          <p>
+            Ten app servers behind a load balancer all talk to one primary.
+            Scaling the stateless tier is easy and feels like progress while the
+            real ceiling sits untouched behind it.
+          </p>
+
+          <h3>No tested failover</h3>
+          <p>
+            A replica you've never promoted and a backup you've never restored
+            are both assumptions. Practise them on a normal Tuesday, not during
+            the incident.
+          </p>
+
+          <div class="note">
+            <span class="tag">The short version</span>
+            <p>
+              Start on one box. Split the database, add a load balancer and make
+              the app stateless, add replicas, then a cache, then a CDN, then
+              queues — and only then consider sharding and multiple regions.
+              Measure before each step, prefer the reversible option, and
+              remember that most systems never need the second half of this
+              list.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
